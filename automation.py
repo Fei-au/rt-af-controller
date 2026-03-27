@@ -5,7 +5,6 @@ import pyautogui
 import time
 import pandas as pd
 from pathlib import Path
-from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.requests import RequestsHTTPTransport
 from pynput.keyboard import Key, Controller
@@ -18,8 +17,6 @@ pyautogui.PAUSE = 0.1
 
 IS_FOCUS_PRINTING = False
 CSV_FILE_PATH = ""
-
-load_dotenv(".env")
 
 
 AUCTION_FLEX_WINDOW_TITLE = "auction flex v"
