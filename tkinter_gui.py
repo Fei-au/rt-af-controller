@@ -4,7 +4,6 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-
 import automation
 
 
@@ -21,6 +20,7 @@ class StoreCreditApp:
         self.log_queue = queue.Queue()
 
         self.csv_path_var = tk.StringVar(value=getattr(automation, "CSV_FILE_PATH", ""))
+        self.lot_tab_count_var = tk.StringVar(value=str(getattr(automation, "LOT_TAB_COUNT", 10)))
 
         self._build_ui()
         self.root.after(100, self._drain_log_queue)
@@ -55,6 +55,13 @@ class StoreCreditApp:
 
         ttk.Button(file_row, text="Browse", command=self._browse_file).pack(side=tk.LEFT, padx=(8, 0))
 
+        lot_tab_row = ttk.Frame(frame)
+        lot_tab_row.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Label(lot_tab_row, text="Lot tab count:").pack(side=tk.LEFT, padx=(0, 8))
+        self.lot_tab_count_entry = ttk.Entry(lot_tab_row, textvariable=self.lot_tab_count_var, width=10)
+        self.lot_tab_count_entry.pack(side=tk.LEFT)
+
         action_row = ttk.Frame(frame)
         action_row.pack(fill=tk.X, pady=(12, 8))
 
@@ -87,8 +94,19 @@ class StoreCreditApp:
 
     def _start_process(self):
         csv_path = self.csv_path_var.get().strip()
+        lot_tab_count_raw = self.lot_tab_count_var.get().strip()
         if not csv_path:
             messagebox.showerror("Missing file", "Please select a CSV file first.")
+            return
+
+        try:
+            lot_tab_count = int(lot_tab_count_raw)
+        except ValueError:
+            messagebox.showerror("Invalid lot tab count", "Lot tab count must be an integer.")
+            return
+
+        if lot_tab_count <= 0:
+            messagebox.showerror("Invalid lot tab count", "Lot tab count must be greater than 0.")
             return
 
         file_path = Path(csv_path)
@@ -105,11 +123,11 @@ class StoreCreditApp:
 
         self.start_btn.configure(state=tk.DISABLED)
         self.stop_btn.configure(state=tk.NORMAL)
-        self._queue_log("Starting process...")
+        self._queue_log(f"Starting process with lot tab count: {lot_tab_count}...")
 
         self.worker_thread = threading.Thread(
             target=self._run_main_process,
-            args=(csv_path,),
+            args=(csv_path, lot_tab_count),
             daemon=True,
         )
         self.worker_thread.start()
@@ -117,14 +135,16 @@ class StoreCreditApp:
     def _stop_process(self):
         if self.worker_thread and self.worker_thread.is_alive():
             self.stop_event.set()
-            self._queue_log("Stop requested. Waiting for current record to finish...")
+            self.stop_btn.configure(state=tk.DISABLED)
+            self._queue_log("Stop requested. Attempting to stop immediately...")
 
-    def _run_main_process(self, csv_path):
+    def _run_main_process(self, csv_path, lot_tab_count):
         try:
             result = automation.pre_processing(
                 csv_path,
                 log_fn=self._queue_log,
                 should_stop_fn=self.stop_event.is_set,
+                lot_tab_count=lot_tab_count,
             )
             self._queue_log(str(result))
         except Exception as exc:
@@ -151,3 +171,4 @@ class StoreCreditApp:
             self.log_text.configure(state=tk.DISABLED)
 
         self.root.after(100, self._drain_log_queue)
+

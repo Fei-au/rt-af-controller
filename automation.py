@@ -1,5 +1,4 @@
 import os
-
 import pygetwindow as gw
 import pyautogui
 import time
@@ -15,7 +14,7 @@ keyboard = Controller()
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.1
 
-IS_FOCUS_PRINTING = False
+LOT_TAB_COUNT = 10
 CSV_FILE_PATH = ""
 
 
@@ -39,6 +38,23 @@ PAYMENT_TYPE_DICT = {
     "MasterCard": 10,
     "Visa": 11,
 }
+
+
+class StopRequested(Exception):
+    """Raised when user requests stopping the automation immediately."""
+
+
+_STOP_CHECKER = None
+
+
+def set_stop_checker(stop_checker=None):
+    global _STOP_CHECKER
+    _STOP_CHECKER = stop_checker
+
+
+def check_stop_requested():
+    if _STOP_CHECKER and _STOP_CHECKER():
+        raise StopRequested("Process stopped by user.")
     
     
 
@@ -148,6 +164,7 @@ def select_item_by_name(
     time.sleep(0.2)
 
     if confirm_with_enter:
+        check_stop_requested()
         pyautogui.press("enter")
 
     return True
@@ -155,9 +172,11 @@ def select_item_by_name(
 def hotkey_combination(keys, delay_between_keys=0.1):
     
     for key in keys:
+        check_stop_requested()
         keyboard.press(key)
         time.sleep(delay_between_keys)
     for key in reversed(keys):
+        check_stop_requested()
         keyboard.release(key)
         time.sleep(delay_between_keys // 5)
 
@@ -170,6 +189,8 @@ def select_item_by_tabbing(
     navigation=False,
 ):
 
+    if confirm_with_enter:
+        check_stop_requested()
     time.sleep(pre_tab_delay)
     
     for _ in range(click_times):
@@ -366,10 +387,19 @@ def add_store_credit_refund_invoice(refund_id, *, timeout=15, headers=None):
     return result["addStoreCreditRefundInvoice"]
 
 
-def run_add_store_credit_flow(target_auction_id=272, bidcard_num=1812, lot=2608, payment_type="Cash", amount=1.23, invoice_number=12345):
+def run_add_store_credit_flow(
+    target_auction_id=272,
+    bidcard_num=1812,
+    lot=2608,
+    payment_type="Cash",
+    amount=1.23,
+    invoice_number=12345,
+    lot_tab_count=LOT_TAB_COUNT,
+):
     # Click select auction button
     window = get_target_window(AUCTION_FLEX_WINDOW_TITLE)
     activate_window(window)
+    check_stop_requested()
     pyautogui.press("enter")
     time.sleep(1.5)  # Wait for the app to load
 
@@ -400,7 +430,10 @@ def run_add_store_credit_flow(target_auction_id=272, bidcard_num=1812, lot=2608,
     time.sleep(3)
     
     # select lot and click enter
-    select_item_by_tabbing(12 if IS_FOCUS_PRINTING else 10, confirm_with_enter=False)
+    select_item_by_tabbing(
+        lot_tab_count,
+        confirm_with_enter=False,
+    )
     time.sleep(1)
     
     # input lot number and click enter
@@ -414,6 +447,7 @@ def run_add_store_credit_flow(target_auction_id=272, bidcard_num=1812, lot=2608,
     select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
     time.sleep(3)
     # esc the edit modal
+    check_stop_requested()
     keyboard.press(Key.esc)
     time.sleep(2)
     
@@ -422,6 +456,7 @@ def run_add_store_credit_flow(target_auction_id=272, bidcard_num=1812, lot=2608,
     time.sleep(3)
     
     # select B.History
+    check_stop_requested()
     time.sleep(0.5)
     keyboard.press(Key.up)
     time.sleep(0.5)
@@ -441,6 +476,7 @@ def run_add_store_credit_flow(target_auction_id=272, bidcard_num=1812, lot=2608,
     time.sleep(1)
     
     # click yes for popup modal
+    check_stop_requested()
     keyboard.press(Key.left)
     time.sleep(0.3)
     keyboard.press(Key.enter)
@@ -455,12 +491,14 @@ def run_add_store_credit_flow(target_auction_id=272, bidcard_num=1812, lot=2608,
     # select amount field and input amount
     select_item_by_tabbing(1, confirm_with_enter=False)
     time.sleep(0.5)
+    check_stop_requested()
     pyautogui.write(str(amount), interval=0.1)
     time.sleep(0.5)
     
     # select note field and input note
     select_item_by_tabbing(2, confirm_with_enter=False)
     time.sleep(0.5)
+    check_stop_requested()
     pyautogui.write("Store credit-" + str(invoice_number), interval=0.1)
     time.sleep(0.5)
 
@@ -490,8 +528,17 @@ def run_add_store_credit_flow(target_auction_id=272, bidcard_num=1812, lot=2608,
     return f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
 
     
-def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
+def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None, lot_tab_count=10):
+    set_stop_checker(should_stop_fn)
     try:
+        try:
+            parsed_lot_tab_count = int(lot_tab_count)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Lot tab count must be an integer.") from exc
+
+        if parsed_lot_tab_count <= 0:
+            raise ValueError("Lot tab count must be greater than 0.")
+
         records = read_records_from_csv(csv_file_path)
         
         # Activate cloud window
@@ -509,8 +556,7 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
         df = pd.read_csv(csv_file_path, encoding="utf-8-sig", dtype=str, keep_default_na=False)
         
         for record in records:
-            if should_stop_fn and should_stop_fn():
-                return "Process stopped by user."
+            check_stop_requested()
 
             flow_args = {
                 "target_auction_id": record["target_auction_id"],
@@ -519,6 +565,7 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                 "payment_type": record["payment_type"],
                 "amount": record["amount"],
                 "invoice_number": record["invoice_number"],
+                "lot_tab_count": parsed_lot_tab_count,
             }
 
             # Fetch if the store credit record already added in the system by store_credit_added this field in db, if it's added, skip the record
@@ -544,6 +591,7 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                 df.to_csv(csv_file_path, index=False)
                 log_fn(f"{record['invoice_number']}: Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}")
                 continue
+            check_stop_requested()
             msg = run_add_store_credit_flow(**flow_args)
             log_fn(msg)
             
@@ -562,18 +610,16 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
             
 
         return 'All records processed successfully.'
+    except StopRequested as e:
+        return str(e)
     except Exception as e:
         return str(e)
+    finally:
+        set_stop_checker(None)
 '''
 status
 1: Success
 0: Failed
 -1: Partially successful
 '''
-
-
-if __name__ == "__main__":
-    CSV_FILE_PATH = "C:\\Users\\KY\\Downloads\\20260327_201021.csv"
-    msg = pre_processing(CSV_FILE_PATH)
-    print(msg)
 
