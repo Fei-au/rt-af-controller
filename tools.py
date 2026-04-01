@@ -2,6 +2,7 @@
 import importlib
 import os
 import shutil
+import sys
 from datetime import datetime
 from pathlib import Path
 import pyautogui
@@ -193,6 +194,12 @@ def _resolve_tesseract_executable_path():
     """
     Resolve a usable Tesseract executable path for Windows environments.
     """
+    # When bundled with PyInstaller, binaries are extracted under _MEIPASS.
+    if getattr(sys, "frozen", False):
+        bundled_cmd = os.path.join(sys._MEIPASS, "Tesseract-OCR", "tesseract.exe")
+        if os.path.isfile(bundled_cmd):
+            return bundled_cmd
+
     env_cmd = os.getenv("TESSERACT_CMD", "").strip()
     if env_cmd and os.path.isfile(env_cmd):
         return env_cmd

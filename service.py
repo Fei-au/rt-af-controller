@@ -1,13 +1,17 @@
 
 
+import os
 import gql
 from gql.transport.requests import RequestsHTTPTransport
 from gql import Client, gql
-from automation import GRAPHQL_URL
 from pathlib import Path
 import pandas as pd
 
 
+LOG_BACK = os.getenv("LOG_BACK", "http://127.0.0.1:8008")
+if not LOG_BACK:
+    raise RuntimeError("Missing required env var LOG_BACK. Set it in .env before running the app.")
+GRAPHQL_URL = LOG_BACK + "/graphql"
 
 
 def read_records_from_csv(csv_file_path):
@@ -68,6 +72,7 @@ def read_records_from_csv(csv_file_path):
         try:
             record = {
                 "row_offset": row_offset,
+                "status": str(row["status"]).strip(),
                 "refund_id": str(row["refund_id"]).strip(),
                 "target_auction_id": int(row["target_auction_id"]),
                 "bidcard_num": int(row["bidcard_num"]),
@@ -85,6 +90,7 @@ def read_records_from_csv(csv_file_path):
         raise ValueError("CSV file has no valid data rows")
 
     return records
+
 
 
 def query_refund_invoice_enhanced(

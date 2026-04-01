@@ -44,3 +44,6 @@ Deduct store credit
    1. check top left corner if "printer" exist
    2. check center "Would you like to return the " exist
    3. check if "apply credit" exist
+
+
+At the end of the request, upload the csv file

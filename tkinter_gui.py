@@ -4,7 +4,7 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-import automation
+import auto_add_credit
 
 
 class StoreCreditApp:
@@ -19,8 +19,8 @@ class StoreCreditApp:
         self.stop_event = threading.Event()
         self.log_queue = queue.Queue()
 
-        self.csv_path_var = tk.StringVar(value=getattr(automation, "CSV_FILE_PATH", ""))
-        self.lot_tab_count_var = tk.StringVar(value=str(getattr(automation, "LOT_TAB_COUNT", 10)))
+        self.csv_path_var = tk.StringVar(value=getattr(auto_add_credit, "CSV_FILE_PATH", ""))
+        self.lot_tab_count_var = tk.StringVar(value=str(getattr(auto_add_credit, "LOT_TAB_COUNT", 10)))
 
         self._build_ui()
         self.root.after(100, self._drain_log_queue)
@@ -119,7 +119,7 @@ class StoreCreditApp:
             return
 
         self.stop_event.clear()
-        automation.CSV_FILE_PATH = csv_path
+        auto_add_credit.CSV_FILE_PATH = csv_path
 
         self.start_btn.configure(state=tk.DISABLED)
         self.stop_btn.configure(state=tk.NORMAL)
@@ -140,7 +140,7 @@ class StoreCreditApp:
 
     def _run_main_process(self, csv_path, lot_tab_count):
         try:
-            result = automation.pre_processing(
+            result = auto_add_credit.pre_processing(
                 csv_path,
                 log_fn=self._queue_log,
                 should_stop_fn=self.stop_event.is_set,

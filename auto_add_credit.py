@@ -1,9 +1,9 @@
-import os
 import pygetwindow as gw
 import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
+from auto_common import get_target_window, activate_window, select_item_by_name, select_item_by_tabbing, check_stop_requested, set_stop_checker, StopRequested
 from tools import extract_center_words_from_screen
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
 
@@ -19,10 +19,6 @@ CSV_FILE_PATH = ""
 
 AUCTION_FLEX_WINDOW_TITLE = "auction flex v"
 AUCTION_FLEX_CLOUD_TITLE = "auction flex in the cloud"
-LOG_BACK = os.getenv("LOG_BACK", "http://127.0.0.1:8008")
-if not LOG_BACK:
-    raise RuntimeError("Missing required env var LOG_BACK. Set it in .env before running the app.")
-GRAPHQL_URL = LOG_BACK + "/graphql"
 
 PAYMENT_TYPE_DICT = {
     "-Not": 1,
@@ -39,184 +35,13 @@ PAYMENT_TYPE_DICT = {
 }
 
 
-class StopRequested(Exception):
-    """Raised when user requests stopping the automation immediately."""
-
-
-_STOP_CHECKER = None
-
-
-def set_stop_checker(stop_checker=None):
-    global _STOP_CHECKER
-    _STOP_CHECKER = stop_checker
-
-
-def check_stop_requested():
-    if _STOP_CHECKER and _STOP_CHECKER():
-        raise StopRequested("Process stopped by user.")
-    
-    
-
-def get_target_window(window_title_partial):
-    windows = gw.getWindowsWithTitle(window_title_partial)
-    if not windows:
-        raise RuntimeError(
-            f"Window with title containing '{window_title_partial}' not found"
-        )
-    return windows[0]
-
-
-def activate_window(window):
-    if window.isMinimized:
-        window.restore()
-        time.sleep(0.4)
-    window.activate()
-    time.sleep(0.4)
-
-
-def locate_image_in_window(
-    window_title_partial,
-    image_path,
-    timeout=8,
-    interval=0.3,
-    confidence=None,
-):
-    """
-    Locate image only inside target window region.
-    """
-    window = get_target_window(window_title_partial)
-    activate_window(window)
-    region = (window.left, window.top, window.width, window.height)
-    end_time = time.time() + timeout
-
-    while time.time() < end_time:
-        if confidence is None:
-            match = pyautogui.locateOnScreen(image_path, region=region, grayscale=True)
-        else:
-            try:
-                match = pyautogui.locateOnScreen(
-                    image_path,
-                    region=region,
-                    grayscale=True,
-                    confidence=confidence,
-                )
-            except Exception:
-                # Fallback when OpenCV confidence matching is unavailable.
-                match = pyautogui.locateOnScreen(image_path, region=region, grayscale=True)
-        if match:
-            return match
-        time.sleep(interval)
-
-    return None
-
-
-def click_image_in_window(window_title_partial, image_path, timeout=8, confidence=None):
-    match = locate_image_in_window(
-        window_title_partial,
-        image_path,
-        timeout=timeout,
-        confidence=confidence,
-    )
-    if not match:
-        return False
-
-    center = pyautogui.center(match)
-    pyautogui.click(center.x, center.y)
-    return True
-
-
-def double_click_image_in_window(
-    window_title_partial,
-    image_path,
-    timeout=8,
-    confidence=None,
-):
-    """
-    Locate an image inside the target window and double-click its center.
-    """
-    match = locate_image_in_window(
-        window_title_partial,
-        image_path,
-        timeout=timeout,
-        confidence=confidence,
-    )
-    if not match:
-        return False
-
-    center = pyautogui.center(match)
-    pyautogui.doubleClick(center.x, center.y)
-    return True
-
-
-def select_item_by_name(
-    item_name,
-    confirm_with_enter=True,
-    pre_type_delay=0.2,
-):
-    """
-    Select an item by typing into the active modal.
-
-    Assumes the modal is already focused after clicking the relevant button.
-    """
-    time.sleep(pre_type_delay)
-    pyautogui.write(str(item_name), interval=0.1)
-    time.sleep(0.2)
-
-    if confirm_with_enter:
-        check_stop_requested()
-        pyautogui.press("enter")
-
-    return True
-
-def hotkey_combination(keys, delay_between_keys=0.1):
-    
-    for key in keys:
-        check_stop_requested()
-        keyboard.press(key)
-        time.sleep(delay_between_keys)
-    for key in reversed(keys):
-        check_stop_requested()
-        keyboard.release(key)
-        time.sleep(delay_between_keys // 5)
-
-def select_item_by_tabbing(
-    click_times,
-    tab_delay=0.3,
-    confirm_with_enter=True,
-    pre_tab_delay=0.2,
-    reverse=False,
-    navigation=False,
-):
-
-    if confirm_with_enter:
-        check_stop_requested()
-    time.sleep(pre_tab_delay)
-    
-    for _ in range(click_times):
-        if reverse and navigation:
-            hotkey_combination([Key.ctrl, Key.shift, Key.tab])
-        elif reverse and not navigation:
-            hotkey_combination([Key.shift, Key.tab])
-        elif not reverse and navigation:
-            hotkey_combination([Key.ctrl, Key.tab])
-        else:
-            pyautogui.hotkey("tab")
-        time.sleep(tab_delay)
-    
-    if confirm_with_enter:
-        pyautogui.press("enter")
-    
-    return True
-
-
-
 def run_add_store_credit_flow(
-    target_auction_id=272,
-    bidcard_num=1812,
-    lot=2608,
-    payment_type="Cash",
-    amount=1.23,
-    invoice_number=12345,
+    target_auction_id,
+    bidcard_num,
+    lot,
+    payment_type,
+    amount,
+    invoice_number,
     lot_tab_count=LOT_TAB_COUNT,
 ):
     # Click select auction button
@@ -270,7 +95,6 @@ def run_add_store_credit_flow(
     select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
     time.sleep(3)
     # esc the edit modal
-    check_stop_requested()
     keyboard.press(Key.esc)
     time.sleep(2)
     
@@ -314,7 +138,6 @@ def run_add_store_credit_flow(
     # select amount field and input amount
     select_item_by_tabbing(1, confirm_with_enter=False)
     time.sleep(0.5)
-    check_stop_requested()
     pyautogui.write(str(amount), interval=0.1)
     time.sleep(0.5)
     
@@ -325,15 +148,18 @@ def run_add_store_credit_flow(
     pyautogui.write("Store credit-" + str(invoice_number), interval=0.1)
     time.sleep(0.5)
 
-    # save the form
+    # save the form and close print preview
     for _ in range(2):
         keyboard.press(Key.esc)
-        
-    # update refund invoice to complete
-    print("Updating refund invoice to complete...")
     time.sleep(2)
+        
+    # back to invoice edit page and esc to exit
+    keyboard.press(Key.esc)
+    time.sleep(0.5)
+    keyboard.press(Key.esc)
+    time.sleep(1)
     
-    # if the invoice is unfullly paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
+    # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
     words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076)
     has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
     if has_unpaid_invoice_text:
@@ -379,7 +205,11 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None, lot_tab_cou
         
         for record in records:
             check_stop_requested()
-
+            if record["status"] == '1':
+                log_fn(f"{record['invoice_number']}: Skipped as already marked successful in CSV.")
+                df.to_csv(csv_file_path, index=False)
+                continue
+            
             flow_args = {
                 "target_auction_id": record["target_auction_id"],
                 "bidcard_num": record["bidcard_num"],
@@ -430,7 +260,6 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None, lot_tab_cou
 
             df.to_csv(csv_file_path, index=False)
             
-
         return 'All records processed successfully.'
     except StopRequested as e:
         return str(e)
@@ -444,4 +273,6 @@ status
 0: Failed
 -1: Partially successful
 '''
+
+
 
