@@ -224,7 +224,9 @@ if __name__ == "__main__":
     target_phrase = "This invoice has not been paid in full"
     target_button1 = "Add Receipt"
     target_button2 = "Apply Deposit"
-    words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
+    words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.6058, y2=0.6376, save_debug_images=True)
+    
+    # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
     # words = extract_center_words_from_screen(
     #     x1=0.6313,
     #     x2=0.7676,
@@ -242,3 +244,14 @@ if __name__ == "__main__":
     print(f"Has '{target_button1}':", has_add_receipt_button)
     print(f"Has '{target_button2}':", has_apply_deposit_button)
     
+    # import time
+    # time.sleep(5)  # Time to switch to the target screen before OCR
+    # # Select all and copy
+    # pyautogui.hotkey('ctrl', 'a')
+    # pyautogui.hotkey('ctrl', 'c')
+    # import pyperclip
+    # time.sleep(0.5)
+    # # Get the data
+    # field_value = pyperclip.paste()
+    # print(f"The value is: {field_value}")
+        

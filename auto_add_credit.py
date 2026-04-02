@@ -13,7 +13,7 @@ keyboard = Controller()
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.1
 
-LOT_TAB_COUNT = 10
+LOT_TAB_COUNT = 12
 CSV_FILE_PATH = ""
 
 
@@ -76,6 +76,8 @@ def run_add_store_credit_flow(
         confirm_with_enter=True,
     )
     time.sleep(3)
+    
+    # skip n tabs if there is a apply 
     
     # select lot and click enter
     select_item_by_tabbing(
@@ -146,7 +148,11 @@ def run_add_store_credit_flow(
     time.sleep(0.5)
     check_stop_requested()
     pyautogui.write("Store credit-" + str(invoice_number), interval=0.1)
+    print("Note entered:", "Store credit-" + str(invoice_number))
     time.sleep(0.5)
+    select_item_by_tabbing(2, confirm_with_enter=False)
+    time.sleep(0.5)
+
 
     # save the form and close print preview
     for _ in range(2):
@@ -205,9 +211,9 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None, lot_tab_cou
         
         for record in records:
             check_stop_requested()
-            if record["status"] == '1':
-                log_fn(f"{record['invoice_number']}: Skipped as already marked successful in CSV.")
-                df.to_csv(csv_file_path, index=False)
+            if record["status"] == '1' or record["status"] == '-1':
+                # log_fn(f"{record['invoice_number']}: Skipped as already processed in CSV.")
+                # df.to_csv(csv_file_path, index=False)
                 continue
             
             flow_args = {

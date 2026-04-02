@@ -174,3 +174,13 @@ def double_click_image_in_window(
     center = pyautogui.center(match)
     pyautogui.doubleClick(center.x, center.y)
     return True
+
+if __name__ == "__main__":
+    m = locate_image_in_window(
+        "Auction Flex v",
+        "images/add-store-credit/edit-invoice-1440-125.png",
+    )
+    
+    print("Match found at:", m)
+    center = pyautogui.center(m)
+    pyautogui.click(center.x, center.y)

@@ -17,14 +17,8 @@ python -m pyautogui
 pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller" --add-data=".env;." main.py
 ```
 
-
-Add new store credit
-1. when leave the invoice page
-Use ocr to check the modal, and do the action
-
-1. When enter the invoice page
-Check if there is the apply payment button, 
-if it is, tab different times
+## Rules
+1. When enter the invoice page, click the bottom right print button to focus it in the following automation
 
 Deduct store credit
 1. Tab twice to skip focus on buttons
@@ -41,9 +35,44 @@ Deduct store credit
       2. click right (now at the "Would you like to return the " model, move to No)
       3. click No
    
-   1. check top left corner if "printer" exist
-   2. check center "Would you like to return the " exist
-   3. check if "apply credit" exist
+   4. check top left corner if "printer" exist
+   5. check center "Would you like to return the " exist
+   6. check if "apply credit" exist
 
 
 At the end of the request, upload the csv file
+- in log_back, add an api to do so
+
+deduct credit
+1. at log_back, add a method export a csv file includes everyting
+2. import csv
+3. do the loop
+4. ? if there are more than one credit, which one will be use? the older one?
+   1. double check the logic which one has been used, like the last deduct amount is smaller than the credit
+   2. add a field to record current credit left
+5. update the refunds status on db
+
+
+
+In the invoice
+for invoice in invoices:
+   while: true
+      words = get_words()
+      due_amount = get_due_amount_from_words()
+      apply_deposit: 
+      if apply_deposit:
+         click
+      else:
+         break
+      multi_credit_modal = get()
+      cur_credit_larger_than_due_amount_modal = get()
+
+      if multi_credit_modal:
+         dissmiss_multi_credit_modal
+         mark_the_first_credit_as_complete # invoices got from api should order by created_at asc
+      elif cur_credit_larger_than_due_amount_modal:
+
+
+      
+
+   
