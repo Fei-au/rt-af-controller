@@ -1,4 +1,4 @@
-import pygetwindow as gw
+import os
 import pyautogui
 import time
 import pandas as pd
@@ -19,6 +19,7 @@ CSV_FILE_PATH = ""
 
 AUCTION_FLEX_WINDOW_TITLE = "auction flex v"
 AUCTION_FLEX_CLOUD_TITLE = "auction flex in the cloud"
+IS_ONLINE = True if os.getenv("IS_ONLINE", "FALSE").upper() == "TRUE" else False
 
 PAYMENT_TYPE_DICT = {
     "-Not": 1,
@@ -226,44 +227,44 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None, lot_tab_cou
                 "lot_tab_count": parsed_lot_tab_count,
             }
 
-            # Fetch if the store credit record already added in the system by store_credit_added this field in db, if it's added, skip the record
-            graphql_result = query_refund_invoice_enhanced(
-                refund_id=record["refund_id"],
-            )
-            if graphql_result is None:
-                df.at[record["row_offset"], "status"] = '0'
-                df.at[record["row_offset"], "details"] = 'GraphQL query failed' + df.at[record["row_offset"], "details"]
-                df.to_csv(csv_file_path, index=False)
-                log_fn(f"{record['invoice_number']}: GraphQL query failed")
-                continue
-            store_credit_added  = graphql_result.get("store_credit_added", False)
-            is_store_credit = graphql_result.get("isStoreCredit", False)
-            is_completed = graphql_result.get("hasCompleted", False)
-            is_voided = graphql_result.get("hasVoided", False)
-            
-            invalid_store_credit = store_credit_added  or not is_store_credit or is_voided or is_completed
-            
-            if invalid_store_credit:
-                df.at[record["row_offset"], "status"] = '0'
-                df.at[record["row_offset"], "details"] = f'Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}' + df.at[record["row_offset"], "details"]
-                df.to_csv(csv_file_path, index=False)
-                log_fn(f"{record['invoice_number']}: Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}")
-                continue
+            if IS_ONLINE:
+                # Fetch if the store credit record already added in the system by store_credit_added this field in db, if it's added, skip the record
+                graphql_result = query_refund_invoice_enhanced(
+                    refund_id=record["refund_id"],
+                )
+                if graphql_result is None:
+                    df.at[record["row_offset"], "status"] = '0'
+                    df.at[record["row_offset"], "details"] = 'GraphQL query failed' + df.at[record["row_offset"], "details"]
+                    df.to_csv(csv_file_path, index=False)
+                    log_fn(f"{record['invoice_number']}: GraphQL query failed")
+                    continue
+                store_credit_added  = graphql_result.get("store_credit_added", False)
+                is_store_credit = graphql_result.get("isStoreCredit", False)
+                is_completed = graphql_result.get("hasCompleted", False)
+                is_voided = graphql_result.get("hasVoided", False)
+                
+                invalid_store_credit = store_credit_added  or not is_store_credit or is_voided or is_completed
+                
+                if invalid_store_credit:
+                    df.at[record["row_offset"], "status"] = '0'
+                    df.at[record["row_offset"], "details"] = f'Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}' + df.at[record["row_offset"], "details"]
+                    df.to_csv(csv_file_path, index=False)
+                    log_fn(f"{record['invoice_number']}: Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}")
+                    continue
             check_stop_requested()
             msg = run_add_store_credit_flow(**flow_args)
             log_fn(msg)
             
-            mutation_result = add_store_credit_refund_invoice(record["refund_id"])
-            modified_count = int(mutation_result.get("modified_count", 0) or 0)
+            df.at[record["row_offset"], "status"] = '1'
+            if IS_ONLINE:
+                mutation_result = add_store_credit_refund_invoice(record["refund_id"])
+                modified_count = int(mutation_result.get("modified_count", 0) or 0)
 
-            if modified_count > 0:
-                df.at[record["row_offset"], "status"] = '1'
-                log_fn(f"{record['invoice_number']}: Store credit added successfully.")
-            else:
-                df.at[record["row_offset"], "status"] = '-1'
-                df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
-                log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
-
+                if modified_count == 0:
+                    df.at[record["row_offset"], "status"] = '-1'
+                    df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
+                    log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
+            
             df.to_csv(csv_file_path, index=False)
             
         return 'All records processed successfully.'

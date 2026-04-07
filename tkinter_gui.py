@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 import auto_add_credit
+import auto_deduct_credit
 
 
 class StoreCreditApp:
@@ -13,13 +14,16 @@ class StoreCreditApp:
         self.root.title("Store Credit Controller")
         self._set_window_icon()
         self.root.geometry("860x520")
-        self.root.minsize(760, 460)
+        self.root.minsize(560, 460)
 
-        self.worker_thread = None
-        self.stop_event = threading.Event()
+        self.add_worker_thread = None
+        self.add_stop_event = threading.Event()
+        self.deduct_worker_thread = None
+        self.deduct_stop_event = threading.Event()
         self.log_queue = queue.Queue()
 
-        self.csv_path_var = tk.StringVar(value=getattr(auto_add_credit, "CSV_FILE_PATH", ""))
+        self.add_csv_path_var = tk.StringVar(value=getattr(auto_add_credit, "CSV_FILE_PATH", ""))
+        self.deduct_csv_path_var = tk.StringVar(value=getattr(auto_deduct_credit, "CSV_FILE_PATH", ""))
         self.lot_tab_count_var = tk.StringVar(value=str(getattr(auto_add_credit, "LOT_TAB_COUNT", 10)))
 
         self._build_ui()
@@ -46,14 +50,18 @@ class StoreCreditApp:
         frame = ttk.Frame(self.root, padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        file_row = ttk.Frame(frame)
-        file_row.pack(fill=tk.X)
+        add_file_row = ttk.Frame(frame)
+        add_file_row.pack(fill=tk.X)
 
-        ttk.Label(file_row, text="CSV file:").pack(side=tk.LEFT, padx=(0, 8))
-        self.file_entry = ttk.Entry(file_row, textvariable=self.csv_path_var)
-        self.file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(add_file_row, text="Store credit adding file:").pack(side=tk.LEFT, padx=(0, 8))
+        self.add_file_entry = ttk.Entry(add_file_row, textvariable=self.add_csv_path_var)
+        self.add_file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        ttk.Button(file_row, text="Browse", command=self._browse_file).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            add_file_row,
+            text="Browse",
+            command=lambda: self._browse_file(self.add_csv_path_var, "Store credit adding file"),
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         lot_tab_row = ttk.Frame(frame)
         lot_tab_row.pack(fill=tk.X, pady=(10, 0))
@@ -62,16 +70,42 @@ class StoreCreditApp:
         self.lot_tab_count_entry = ttk.Entry(lot_tab_row, textvariable=self.lot_tab_count_var, width=10)
         self.lot_tab_count_entry.pack(side=tk.LEFT)
 
-        action_row = ttk.Frame(frame)
-        action_row.pack(fill=tk.X, pady=(12, 8))
+        add_action_row = ttk.Frame(frame)
+        add_action_row.pack(fill=tk.X, pady=(10, 0))
 
-        self.start_btn = ttk.Button(action_row, text="Start", command=self._start_process)
-        self.start_btn.pack(side=tk.LEFT)
+        self.add_start_btn = ttk.Button(add_action_row, text="Start Add", command=self._start_add_process)
+        self.add_start_btn.pack(side=tk.LEFT)
 
-        self.stop_btn = ttk.Button(action_row, text="Stop", command=self._stop_process, state=tk.DISABLED)
-        self.stop_btn.pack(side=tk.LEFT, padx=(8, 0))
+        self.add_stop_btn = ttk.Button(add_action_row, text="Stop Add", command=self._stop_add_process, state=tk.DISABLED)
+        self.add_stop_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        ttk.Label(frame, text="Logs:").pack(anchor=tk.W)
+        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(16, 14))
+
+        deduct_file_row = ttk.Frame(frame)
+        deduct_file_row.pack(fill=tk.X)
+
+        ttk.Label(deduct_file_row, text="Store credit deducting file:").pack(side=tk.LEFT, padx=(0, 8))
+        self.deduct_file_entry = ttk.Entry(deduct_file_row, textvariable=self.deduct_csv_path_var)
+        self.deduct_file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        ttk.Button(
+            deduct_file_row,
+            text="Browse",
+            command=lambda: self._browse_file(self.deduct_csv_path_var, "Store credit deducting file"),
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
+        deduct_action_row = ttk.Frame(frame)
+        deduct_action_row.pack(fill=tk.X, pady=(10, 0))
+
+        self.deduct_start_btn = ttk.Button(deduct_action_row, text="Start Deduct", command=self._start_deduct_process)
+        self.deduct_start_btn.pack(side=tk.LEFT)
+
+        self.deduct_stop_btn = ttk.Button(deduct_action_row, text="Stop Deduct", command=self._stop_deduct_process, state=tk.DISABLED)
+        self.deduct_stop_btn.pack(side=tk.LEFT, padx=(8, 0))
+
+        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(16, 14))
+
+        ttk.Label(frame, text="Logs:").pack(anchor=tk.W, pady=(12, 0))
 
         log_frame = ttk.Frame(frame)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
@@ -83,20 +117,23 @@ class StoreCreditApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.log_text.configure(yscrollcommand=scrollbar.set)
 
-    def _browse_file(self):
+    def _browse_file(self, target_var, label):
         path = filedialog.askopenfilename(
-            title="Select CSV file",
+            title=f"Select {label}",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
         )
         if path:
-            self.csv_path_var.set(path)
-            self._queue_log(f"Selected CSV file: {path}")
+            target_var.set(path)
+            if target_var is self.add_csv_path_var:
+                self._queue_add_log(f"Selected {label}: {path}")
+            else:
+                self._queue_deduct_log(f"Selected {label}: {path}")
 
-    def _start_process(self):
-        csv_path = self.csv_path_var.get().strip()
+    def _start_add_process(self):
+        csv_path = self.add_csv_path_var.get().strip()
         lot_tab_count_raw = self.lot_tab_count_var.get().strip()
         if not csv_path:
-            messagebox.showerror("Missing file", "Please select a CSV file first.")
+            messagebox.showerror("Missing file", "Please select the store credit adding file first.")
             return
 
         try:
@@ -114,53 +151,111 @@ class StoreCreditApp:
             messagebox.showerror("Invalid file", "Please choose a valid CSV file.")
             return
 
-        if self.worker_thread and self.worker_thread.is_alive():
-            self._queue_log("Process is already running.")
+        if self.add_worker_thread and self.add_worker_thread.is_alive():
+            self._queue_add_log("Process is already running.")
             return
 
-        self.stop_event.clear()
+        self.add_stop_event.clear()
         auto_add_credit.CSV_FILE_PATH = csv_path
 
-        self.start_btn.configure(state=tk.DISABLED)
-        self.stop_btn.configure(state=tk.NORMAL)
-        self._queue_log(f"Starting process with lot tab count: {lot_tab_count}...")
+        self.add_start_btn.configure(state=tk.DISABLED)
+        self.add_stop_btn.configure(state=tk.NORMAL)
+        self._queue_add_log(f"Starting process with lot tab count: {lot_tab_count}...")
 
-        self.worker_thread = threading.Thread(
-            target=self._run_main_process,
+        self.add_worker_thread = threading.Thread(
+            target=self._run_add_process,
             args=(csv_path, lot_tab_count),
             daemon=True,
         )
-        self.worker_thread.start()
+        self.add_worker_thread.start()
 
-    def _stop_process(self):
-        if self.worker_thread and self.worker_thread.is_alive():
-            self.stop_event.set()
-            self.stop_btn.configure(state=tk.DISABLED)
-            self._queue_log("Stop requested. Attempting to stop immediately...")
+    def _stop_add_process(self):
+        if self.add_worker_thread and self.add_worker_thread.is_alive():
+            self.add_stop_event.set()
+            self.add_stop_btn.configure(state=tk.DISABLED)
+            self._queue_add_log("Stop requested. Attempting to stop immediately...")
 
-    def _run_main_process(self, csv_path, lot_tab_count):
+    def _start_deduct_process(self):
+        csv_path = self.deduct_csv_path_var.get().strip()
+        if not csv_path:
+            messagebox.showerror("Missing file", "Please select the store credit deducting file first.")
+            return
+
+        file_path = Path(csv_path)
+        if not file_path.exists() or file_path.suffix.lower() != ".csv":
+            messagebox.showerror("Invalid file", "Please choose a valid CSV file.")
+            return
+
+        if self.deduct_worker_thread and self.deduct_worker_thread.is_alive():
+            self._queue_deduct_log("Deduct process is already running.")
+            return
+
+        self.deduct_stop_event.clear()
+        auto_deduct_credit.CSV_FILE_PATH = csv_path
+
+        self.deduct_start_btn.configure(state=tk.DISABLED)
+        self.deduct_stop_btn.configure(state=tk.NORMAL)
+        self._queue_deduct_log("Starting deduct process...")
+
+        self.deduct_worker_thread = threading.Thread(
+            target=self._run_deduct_process,
+            args=(csv_path,),
+            daemon=True,
+        )
+        self.deduct_worker_thread.start()
+
+    def _stop_deduct_process(self):
+        if self.deduct_worker_thread and self.deduct_worker_thread.is_alive():
+            self.deduct_stop_event.set()
+            self.deduct_stop_btn.configure(state=tk.DISABLED)
+            self._queue_deduct_log("Deduct stop requested. Attempting to stop immediately...")
+
+    def _run_add_process(self, csv_path, lot_tab_count):
         try:
             result = auto_add_credit.pre_processing(
                 csv_path,
-                log_fn=self._queue_log,
-                should_stop_fn=self.stop_event.is_set,
+                log_fn=self._queue_add_log,
+                should_stop_fn=self.add_stop_event.is_set,
                 lot_tab_count=lot_tab_count,
             )
-            self._queue_log(str(result))
+            self._queue_add_log(str(result))
         except Exception as exc:
-            self._queue_log(f"Error: {exc}")
+            self._queue_add_log(f"Error: {exc}")
         finally:
             self.root.after(0, self._on_worker_done)
 
-    def _on_worker_done(self):
-        self.start_btn.configure(state=tk.NORMAL)
-        self.stop_btn.configure(state=tk.DISABLED)
-        self.stop_event.clear()
-        self._queue_log("Process finished.")
+    def _run_deduct_process(self, csv_path):
+        try:
+            result = auto_deduct_credit.pre_processing(
+                csv_path,
+                log_fn=self._queue_deduct_log,
+                should_stop_fn=self.deduct_stop_event.is_set,
+            )
+            self._queue_deduct_log(str(result))
+        except Exception as exc:
+            self._queue_deduct_log(f"Error: {exc}")
+        finally:
+            self.root.after(0, self._on_deduct_worker_done)
 
-    def _queue_log(self, message):
+    def _on_worker_done(self):
+        self.add_start_btn.configure(state=tk.NORMAL)
+        self.add_stop_btn.configure(state=tk.DISABLED)
+        self.add_stop_event.clear()
+        self._queue_add_log("Process finished.")
+
+    def _on_deduct_worker_done(self):
+        self.deduct_start_btn.configure(state=tk.NORMAL)
+        self.deduct_stop_btn.configure(state=tk.DISABLED)
+        self.deduct_stop_event.clear()
+        self._queue_deduct_log("Deduct process finished.")
+
+    def _queue_add_log(self, message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.log_queue.put(f"[{timestamp}] {message}")
+        self.log_queue.put(f"[{timestamp}] [ADD] {message}")
+
+    def _queue_deduct_log(self, message):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.log_queue.put(f"[{timestamp}] [DEDUCT] {message}")
 
     def _drain_log_queue(self):
         while not self.log_queue.empty():

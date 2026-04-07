@@ -92,6 +92,82 @@ def read_records_from_csv(csv_file_path):
     return records
 
 
+def read_deduct_records_from_csv(csv_file_path):
+    """
+    Read store-credit records from a CSV file and convert fields to expected types.
+
+    Required headers:
+    - auction_id
+    - bidcard_num
+    - invoice_number
+    - sc_id
+    - sc_invoice_number
+    """
+    required_fields = [
+        "auction_id",
+        "bidcard_num",
+        "invoice_number",
+        "sc_id",
+        "sc_invoice_number",
+    ]
+
+    file_path = Path(csv_file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {file_path}")
+
+    df = pd.read_csv(
+        file_path,
+        encoding="utf-8-sig",
+        dtype=str,
+        keep_default_na=False,
+    )
+
+    missing_fields = [field for field in required_fields if field not in df.columns]
+    if missing_fields:
+        raise ValueError(f"Missing required CSV headers: {', '.join(missing_fields)}")
+
+    if 'status' not in df.columns:
+        df['status'] = pd.NA
+        df.to_csv(csv_file_path, index=False)
+    if 'details' not in df.columns:
+        df['details'] = pd.NA
+        df.to_csv(csv_file_path, index=False)
+        
+    records = {}
+    for row_offset, row in df.iterrows():
+        row_index = row_offset + 2
+        
+        if not row["bidcard_num"] or row["bidcard_num"].strip() == "":
+            df.at[row_offset, 'status'] = '-1'
+            df.at[row_offset, 'details'] = 'Missing bidcard' + df.at[row_offset, 'details']
+            df.to_csv(csv_file_path, index=False)
+            continue
+        auction_id = int(row["target_auction_id"])
+        try:
+            if int(row["bidcard_num"]) not in records:
+                records[int(row["bidcard_num"])] = [{
+                    "row_offset": row_offset,
+                    "status": str(row["status"]).strip(),
+                    "invoice_number": int(row["invoice_number"]),
+                    "sc_id": str(row["sc_id"]).strip(),
+                    "sc_invoice_number": str(row["sc_invoice_number"]).strip(),
+                }]
+            else:
+                records[int(row["bidcard_num"])].append({
+                    "row_offset": row_offset,
+                    "status": str(row["status"]).strip(),
+                    "invoice_number": int(row["invoice_number"]),
+                    "sc_id": str(row["sc_id"]).strip(),
+                    "sc_invoice_number": str(row["sc_invoice_number"]).strip(),
+                })
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid data at CSV row {row_index}: {row.to_dict()}") from exc
+
+    if not records:
+        raise ValueError("CSV file has no valid data rows")
+
+    return auction_id,records
+
 
 def query_refund_invoice_enhanced(
     refund_id,
