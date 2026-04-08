@@ -130,6 +130,14 @@ class StoreCreditApp:
                 self._queue_deduct_log(f"Selected {label}: {path}")
 
     def _start_add_process(self):
+        if self.deduct_worker_thread and self.deduct_worker_thread.is_alive():
+            messagebox.showwarning(
+                "Process already running",
+                "Deduct process is currently running. Please wait for it to finish first.",
+            )
+            self._queue_add_log("Cannot start add process while deduct process is running.")
+            return
+
         csv_path = self.add_csv_path_var.get().strip()
         lot_tab_count_raw = self.lot_tab_count_var.get().strip()
         if not csv_path:
@@ -160,6 +168,7 @@ class StoreCreditApp:
 
         self.add_start_btn.configure(state=tk.DISABLED)
         self.add_stop_btn.configure(state=tk.NORMAL)
+        self.deduct_start_btn.configure(state=tk.DISABLED)
         self._queue_add_log(f"Starting process with lot tab count: {lot_tab_count}...")
 
         self.add_worker_thread = threading.Thread(
@@ -176,6 +185,14 @@ class StoreCreditApp:
             self._queue_add_log("Stop requested. Attempting to stop immediately...")
 
     def _start_deduct_process(self):
+        if self.add_worker_thread and self.add_worker_thread.is_alive():
+            messagebox.showwarning(
+                "Process already running",
+                "Add process is currently running. Please wait for it to finish first.",
+            )
+            self._queue_deduct_log("Cannot start deduct process while add process is running.")
+            return
+
         csv_path = self.deduct_csv_path_var.get().strip()
         if not csv_path:
             messagebox.showerror("Missing file", "Please select the store credit deducting file first.")
@@ -189,12 +206,13 @@ class StoreCreditApp:
         if self.deduct_worker_thread and self.deduct_worker_thread.is_alive():
             self._queue_deduct_log("Deduct process is already running.")
             return
-
+        
         self.deduct_stop_event.clear()
         auto_deduct_credit.CSV_FILE_PATH = csv_path
 
         self.deduct_start_btn.configure(state=tk.DISABLED)
         self.deduct_stop_btn.configure(state=tk.NORMAL)
+        self.add_start_btn.configure(state=tk.DISABLED)
         self._queue_deduct_log("Starting deduct process...")
 
         self.deduct_worker_thread = threading.Thread(
@@ -240,12 +258,16 @@ class StoreCreditApp:
     def _on_worker_done(self):
         self.add_start_btn.configure(state=tk.NORMAL)
         self.add_stop_btn.configure(state=tk.DISABLED)
+        if not (self.deduct_worker_thread and self.deduct_worker_thread.is_alive()):
+            self.deduct_start_btn.configure(state=tk.NORMAL)
         self.add_stop_event.clear()
         self._queue_add_log("Process finished.")
 
     def _on_deduct_worker_done(self):
         self.deduct_start_btn.configure(state=tk.NORMAL)
         self.deduct_stop_btn.configure(state=tk.DISABLED)
+        if not (self.add_worker_thread and self.add_worker_thread.is_alive()):
+            self.add_start_btn.configure(state=tk.NORMAL)
         self.deduct_stop_event.clear()
         self._queue_deduct_log("Deduct process finished.")
 

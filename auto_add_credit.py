@@ -3,10 +3,10 @@ import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
-from auto_common import get_target_window, activate_window, select_item_by_name, select_item_by_tabbing, check_stop_requested, set_stop_checker, StopRequested
+from auto_common import get_target_window, activate_window, select_item_by_name, select_item_by_tabbing, StopRequested
 from tools import extract_center_words_from_screen
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
-
+from auto_common import AUCTION_FLEX_CLOUD_TITLE, AUCTION_FLEX_WINDOW_TITLE, IS_ONLINE, check_stop_requested, set_stop_checker
 
 keyboard = Controller()
 
@@ -15,11 +15,6 @@ pyautogui.PAUSE = 0.1
 
 LOT_TAB_COUNT = 12
 CSV_FILE_PATH = ""
-
-
-AUCTION_FLEX_WINDOW_TITLE = "auction flex v"
-AUCTION_FLEX_CLOUD_TITLE = "auction flex in the cloud"
-IS_ONLINE = True if os.getenv("IS_ONLINE", "FALSE").upper() == "TRUE" else False
 
 PAYMENT_TYPE_DICT = {
     "-Not": 1,

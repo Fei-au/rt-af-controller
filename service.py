@@ -92,7 +92,7 @@ def read_records_from_csv(csv_file_path):
     return records
 
 
-def read_deduct_records_from_csv(csv_file_path):
+def read_deduct_records_from_csv(csv_file_path) -> tuple[int, dict[int, list[dict]]]:
     """
     Read store-credit records from a CSV file and convert fields to expected types.
 
@@ -131,6 +131,9 @@ def read_deduct_records_from_csv(csv_file_path):
         df.to_csv(csv_file_path, index=False)
     if 'details' not in df.columns:
         df['details'] = pd.NA
+        df.to_csv(csv_file_path, index=False)
+    if 'errors' not in df.columns:
+        df['errors'] = pd.NA
         df.to_csv(csv_file_path, index=False)
         
     records = {}

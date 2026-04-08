@@ -1,14 +1,55 @@
+import os
 import pygetwindow as gw
 import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
+import pyperclip
 
 
 keyboard = Controller()
 
-class StopRequested(Exception):
-    """Raised when user requests stopping the automation immediately."""
+
+AUCTION_FLEX_WINDOW_TITLE = "auction flex v"
+AUCTION_FLEX_CLOUD_TITLE = "auction flex in the cloud"
+IS_ONLINE = True if os.getenv("IS_ONLINE", "FALSE").upper() == "TRUE" else False
+
+
+INVOICE_PAID_FULL_MODAL_COORDS = {
+    "x1": 0.3633,
+    "x2": 0.6426,
+    "y1": 0.3958,
+    "y2": 0.6076,
+}
+
+INVOIE_SUMMARY_BLOCK_COORDS = {
+    "x1": 0.6313,
+    "x2": 0.7676,
+    "y1": 0.3646,
+    "y2": 0.6424,
+}
+
+RETURN_REMAININGS_MODAL_COORDS = {
+    "x1": 0.3633,
+    "x2": 0.6426,
+    "y1": 0.3958,
+    "y2": 0.6076,
+}
+
+PRITER_POPUP_COORDS = {
+    "x1": 0.1484,
+    "x2": 0.2734,
+    "y1": 0.1250,
+    "y2": 0.3854,
+}
+
+CREDIT_DETAILS_COORDS = {
+    "x1": 0.3433,
+    "x2": 0.5326,
+    "y1": 0.5658,
+    "y2": 0.6776,
+}
+
 
 
 _STOP_CHECKER = None
@@ -22,6 +63,9 @@ def set_stop_checker(stop_checker=None):
 def check_stop_requested():
     if _STOP_CHECKER and _STOP_CHECKER():
         raise StopRequested("Process stopped by user.")
+    
+class StopRequested(Exception):
+    """Raised when user requests stopping the automation immediately."""
     
     
 def get_target_window(window_title_partial):
@@ -175,12 +219,14 @@ def double_click_image_in_window(
     pyautogui.doubleClick(center.x, center.y)
     return True
 
-if __name__ == "__main__":
-    m = locate_image_in_window(
-        "Auction Flex v",
-        "images/add-store-credit/edit-invoice-1440-125.png",
-    )
+def copy():
+    pyautogui.hotkey('ctrl', 'a')
+    pyautogui.hotkey('ctrl', 'c')
     
-    print("Match found at:", m)
-    center = pyautogui.center(m)
-    pyautogui.click(center.x, center.y)
+def paste():
+    time.sleep(0.5)
+    field_value = pyperclip.paste()
+    return field_value
+
+if __name__ == "__main__":
+    print(**INVOIE_SUMMARY_BLOCK_COORDS)

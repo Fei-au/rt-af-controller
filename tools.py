@@ -224,7 +224,13 @@ if __name__ == "__main__":
     target_phrase = "This invoice has not been paid in full"
     target_button1 = "Add Receipt"
     target_button2 = "Apply Deposit"
-    words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.6058, y2=0.6376, save_debug_images=True)
+    words = extract_center_words_from_screen(
+        x1=0.3433,
+        x2=0.5326,
+        y1=0.5658,
+        y2=0.6776,
+        save_debug_images=True
+    )
     
     # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
     # words = extract_center_words_from_screen(
@@ -235,14 +241,14 @@ if __name__ == "__main__":
     #     save_debug_images=True,
     # )
     ocr_text = " ".join(words)
-    has_unpaid_invoice_text = target_phrase.lower() in ocr_text.lower()
+    # has_unpaid_invoice_text = target_phrase.lower() in ocr_text.lower()
 
-    has_add_receipt_button = target_button1.lower() in ocr_text.lower()
-    has_apply_deposit_button = target_button2.lower() in ocr_text.lower()
+    # has_add_receipt_button = target_button1.lower() in ocr_text.lower()
+    # has_apply_deposit_button = target_button2.lower() in ocr_text.lower()
     print("OCR-detected words in center area:", words)
-    print(f"Unpaid:", has_unpaid_invoice_text)
-    print(f"Has '{target_button1}':", has_add_receipt_button)
-    print(f"Has '{target_button2}':", has_apply_deposit_button)
+    # print(f"Unpaid:", has_unpaid_invoice_text)
+    # print(f"Has '{target_button1}':", has_add_receipt_button)
+    # print(f"Has '{target_button2}':", has_apply_deposit_button)
     
     # import time
     # time.sleep(5)  # Time to switch to the target screen before OCR
