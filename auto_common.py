@@ -6,6 +6,7 @@ from pynput.keyboard import Key, Controller
 import pyperclip
 
 
+
 keyboard = Controller()
 
 
@@ -35,7 +36,7 @@ RETURN_REMAININGS_MODAL_COORDS = {
     "y2": 0.6076,
 }
 
-PRITER_POPUP_COORDS = {
+PRINTER_POPUP_COORDS = {
     "x1": 0.1484,
     "x2": 0.2734,
     "y1": 0.1250,
@@ -53,6 +54,23 @@ CREDIT_DETAILS_COORDS = {
 
 _STOP_CHECKER = None
 
+def _normalize_percentage_coordinate(value, name):
+    """
+    Convert a coordinate to a normalized ratio in range [0, 1].
+    Accepts either 0-1 or 0-100 input.
+    """
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number.") from exc
+
+    if 0 <= numeric_value <= 1:
+        return numeric_value
+
+    if 0 <= numeric_value <= 100:
+        return numeric_value / 100.0
+
+    raise ValueError(f"{name} must be between 0 and 1, or between 0 and 100.")
 
 def set_stop_checker(stop_checker=None):
     global _STOP_CHECKER
@@ -151,18 +169,63 @@ def locate_image_in_window(
     timeout=8,
     interval=0.3,
     confidence=None,
+    x1=None,
+    x2=None,
+    y1=None,
+    y2=None,
 ):
     """
     Locate image only inside target window region.
     """
+    # Resolve image path relative to script directory
+    if image_path.startswith("/"):
+        # Remove leading slash and resolve relative to script directory
+        image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), image_path.lstrip("/"))
+    elif not os.path.isabs(image_path):
+        # If relative path, resolve relative to script directory
+        image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), image_path)
+    
     window = get_target_window(window_title_partial)
     activate_window(window)
-    region = (window.left, window.top, window.width, window.height)
-    end_time = time.time() + timeout
 
+    has_crop_coords = any(value is not None for value in (x1, x2, y1, y2))
+    if has_crop_coords:
+        if any(value is None for value in (x1, x2, y1, y2)):
+            raise ValueError("Crop coordinates must include x1, x2, y1, and y2 together.")
+
+        x1_ratio = _normalize_percentage_coordinate(x1, "x1")
+        x2_ratio = _normalize_percentage_coordinate(x2, "x2")
+        y1_ratio = _normalize_percentage_coordinate(y1, "y1")
+        y2_ratio = _normalize_percentage_coordinate(y2, "y2")
+
+        if x2_ratio <= x1_ratio or y2_ratio <= y1_ratio:
+            raise ValueError("Invalid crop area: x2 must be greater than x1 and y2 greater than y1.")
+
+        crop_left = int(window.width * x1_ratio)
+        crop_right = int(window.width * x2_ratio)
+        crop_top = int(window.height * y1_ratio)
+        crop_bottom = int(window.height * y2_ratio)
+
+        crop_left = max(0, min(crop_left, window.width - 1))
+        crop_top = max(0, min(crop_top, window.height - 1))
+        crop_right = max(crop_left + 1, min(crop_right, window.width))
+        crop_bottom = max(crop_top + 1, min(crop_bottom, window.height))
+
+        region = (
+            window.left + crop_left,
+            window.top + crop_top,
+            crop_right - crop_left,
+            crop_bottom - crop_top,
+        )
+    else:
+        region = (window.left, window.top, window.width, window.height)
+    end_time = time.time() + timeout
+    # Save the region image for debugging
+    screenshot = pyautogui.screenshot(region=region)
+    screenshot.save("debug_region.png")
     while time.time() < end_time:
         if confidence is None:
-            match = pyautogui.locateOnScreen(image_path, region=region, grayscale=True)
+            match = pyautogui.locateOnScreen(image_path, region=region, confidence=0.5)
         else:
             try:
                 match = pyautogui.locateOnScreen(
@@ -228,4 +291,20 @@ def paste():
     return field_value
 
 if __name__ == "__main__":
-    print(**INVOIE_SUMMARY_BLOCK_COORDS)
+    time.sleep(5)  # Time to switch to the target window after running the script
+    result = locate_image_in_window(
+        AUCTION_FLEX_WINDOW_TITLE, 
+        "/images/add-store-credit/quick-info-2560-125.png",
+        timeout=5, 
+        x1=0.20,
+        x2=0.48,
+        y1=0.38,
+        y2=0.48
+        )
+    # click the center of the found image
+    if result:
+        center = pyautogui.center(result)
+        pyautogui.click(center.x, center.y)
+        print("Image found and clicked.")
+    else:
+        print("Image not found.")

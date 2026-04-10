@@ -10,7 +10,11 @@ import pyautogui
 from PIL import Image, ImageOps
 import cv2
 import numpy as np
-from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, INVOIE_SUMMARY_BLOCK_COORDS, RETURN_REMAININGS_MODAL_COORDS
+from pynput.keyboard import Key, Controller
+from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, INVOIE_SUMMARY_BLOCK_COORDS, RETURN_REMAININGS_MODAL_COORDS, PRINTER_POPUP_COORDS, CREDIT_DETAILS_COORDS
+
+
+keyboard = Controller()
 
 def extract_center_words_from_screen(
     x1=40,
@@ -23,6 +27,7 @@ def extract_center_words_from_screen(
     debug_output_dir="images/debug-crops",
     preprocess_scale=3,
     preprocess_threshold=180,
+    kernel_size=(2,2)
 ):
     """
     Take a full-screen screenshot, crop by percentage coordinates,
@@ -85,6 +90,7 @@ def extract_center_words_from_screen(
         scale=preprocess_scale,
         threshold=preprocess_threshold,
         save_intermediate_images=save_debug_images,
+        kernel_size=kernel_size
     )
 
     if save_debug_images:
@@ -149,15 +155,15 @@ def _normalize_percentage_coordinate(value, name):
     raise ValueError(f"{name} must be between 0 and 1, or between 0 and 100.")
 
 
-def _preprocess_ocr_crop(image, scale=3, threshold=180, save_intermediate_images=False):
+def _preprocess_ocr_crop(image, scale=3, threshold=180, save_intermediate_images=False, kernel_size=(2,2)):
     """
     Prepare a cropped image for OCR by increasing its size and simplifying it.
     """
     intermediate_images = {} if save_intermediate_images else None
 
     grayscale_image = ImageOps.grayscale(image)
-    if intermediate_images is not None:
-        intermediate_images["grayscale"] = grayscale_image.copy()
+    # if intermediate_images is not None:
+    #     intermediate_images["grayscale"] = grayscale_image.copy()
 
     if scale and scale > 1:
         resized_size = (
@@ -167,23 +173,23 @@ def _preprocess_ocr_crop(image, scale=3, threshold=180, save_intermediate_images
         resample_filter = getattr(Image, "Resampling", Image).LANCZOS
         grayscale_image = grayscale_image.resize(resized_size, resample=resample_filter)
 
-    if intermediate_images is not None:
-        intermediate_images["resized"] = grayscale_image.copy()
+    # if intermediate_images is not None:
+    #     intermediate_images["resized"] = grayscale_image.copy()
 
     grayscale_image = ImageOps.autocontrast(grayscale_image)
+
+
+    if threshold is not None:
+        grayscale_image = grayscale_image.point(
+            lambda pixel: 255 if pixel > int(threshold) else 0,
+            mode="1",
+        ).convert("L")
+
     if intermediate_images is not None:
         intermediate_images["autocontrast"] = grayscale_image.copy()
-
-    # if threshold is not None:
-    #     grayscale_image = grayscale_image.point(
-    #         lambda pixel: 255 if pixel > int(threshold) else 0,
-    #         mode="1",
-    #     ).convert("L")
-
-
+    
     # Convert PIL image to OpenCV format
     cv_image = np.array(grayscale_image)
-    
     
     # Apply Adaptive Threshold
     # 255: Value to give if pixel exceeds threshold
@@ -191,41 +197,19 @@ def _preprocess_ocr_crop(image, scale=3, threshold=180, save_intermediate_images
     # THRESH_BINARY: Standard black/white
     # 11: Block size (must be odd). Larger = more global; Smaller = more local.
     # 2: Constant subtracted from the mean
-    # processed = cv2.adaptiveThreshold(cv_image, 255, 
+    # cv_image = cv2.adaptiveThreshold(cv_image, 255, 
     #                                 cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
     #                                 cv2.THRESH_BINARY, 11, 2)
-    # adaptive_thresh_image = Image.fromarray(processed)
+    # adaptive_thresh_image = Image.fromarray(cv_image)
     # if intermediate_images is not None:
     #     intermediate_images["adaptive_threshold"] = adaptive_thresh_image.copy()
-    # # Dilate to make text bolder
-    # kernel = np.ones((3,3), np.uint8) # A small 2x2 kernel
-
-    # # This will make the black lines (text and borders) thinner
-    # processed = cv2.dilate(cv_image, kernel, iterations=1)
     
-    # 1. Find contours in the thresholded image
-    contours, _ = cv2.findContours(cv_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Dilate to make text bolder
+    kernel = np.ones(kernel_size, np.uint8) # A small 2x2 kernel
 
-    processed = cv_image
-    if contours:
-        # Save all detected contours in red so contour detection can be inspected.
-        contour_debug_image = cv2.cvtColor(cv_image.copy(), cv2.COLOR_GRAY2BGR)
-        cv2.drawContours(contour_debug_image, contours, -1, (0, 0, 255), 2)
-        contour_debug_dir = Path("images") / "debug-crops"
-        contour_debug_dir.mkdir(parents=True, exist_ok=True)
-        contour_debug_path = contour_debug_dir / f"detected_contours_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
-        cv2.imwrite(str(contour_debug_path), contour_debug_image)
-
-        # 2. Get the largest contour (the modal box)
-        largest_contour = max(contours, key=cv2.contourArea)
-        x, y, w, h = cv2.boundingRect(largest_contour)
-
-        # 3. Crop slightly INSIDE the border (e.g., 10 pixels)
-        # to ensure the bold line is gone
-        padding = 10
-        crop_inner = cv_image[y + padding : y + h - padding, x + padding : x + w - padding]
-        processed = crop_inner
-
+    # This will make the black lines (text and borders) thinner
+    processed = cv2.dilate(cv_image, kernel, iterations=1)
+    
     processed_image = Image.fromarray(processed)
     
     if intermediate_images is not None:
@@ -317,7 +301,7 @@ if __name__ == "__main__":
     # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
     time.sleep(5)  # Time to switch to the target screen before OCR
     words = extract_center_words_from_screen(
-        **RETURN_REMAININGS_MODAL_COORDS,
+        **PRINTER_POPUP_COORDS,
         save_debug_images=True,
     )
     ocr_text = " ".join(words)
@@ -340,4 +324,3 @@ if __name__ == "__main__":
     # # Get the data
     # field_value = pyperclip.paste()
     # print(f"The value is: {field_value}")
-        
