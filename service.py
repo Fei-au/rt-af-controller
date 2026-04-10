@@ -9,6 +9,7 @@ import pandas as pd
 
 
 LOG_BACK = os.getenv("LOG_BACK", "http://127.0.0.1:8008")
+print(f"Using LOG_BACK: {LOG_BACK}")
 if not LOG_BACK:
     raise RuntimeError("Missing required env var LOG_BACK. Set it in .env before running the app.")
 GRAPHQL_URL = LOG_BACK + "/graphql"
@@ -145,7 +146,7 @@ def read_deduct_records_from_csv(csv_file_path) -> tuple[int, dict[int, list[dic
             df.at[row_offset, 'details'] = 'Missing bidcard' + df.at[row_offset, 'details']
             df.to_csv(csv_file_path, index=False)
             continue
-        auction_id = int(row["target_auction_id"])
+        auction_id = int(row["auction_id"])
         try:
             if int(row["bidcard_num"]) not in records:
                 records[int(row["bidcard_num"])] = [{

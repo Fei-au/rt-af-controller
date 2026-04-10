@@ -3,7 +3,7 @@ import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
-from auto_common import get_target_window, activate_window, select_item_by_name, select_item_by_tabbing, StopRequested
+from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, get_target_window, activate_window, select_item_by_name, select_item_by_tabbing, StopRequested
 from tools import extract_center_words_from_screen
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, AUCTION_FLEX_WINDOW_TITLE, IS_ONLINE, check_stop_requested, set_stop_checker
@@ -162,7 +162,7 @@ def run_add_store_credit_flow(
     time.sleep(1)
     
     # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
-    words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076)
+    words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
     has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
     if has_unpaid_invoice_text:
         keyboard.press(Key.enter)

@@ -3,10 +3,14 @@ import importlib
 import os
 import shutil
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 import pyautogui
 from PIL import Image, ImageOps
+import cv2
+import numpy as np
+from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, INVOIE_SUMMARY_BLOCK_COORDS, RETURN_REMAININGS_MODAL_COORDS
 
 def extract_center_words_from_screen(
     x1=40,
@@ -76,11 +80,18 @@ def extract_center_words_from_screen(
         )
     )
 
-    preprocessed_crop = _preprocess_ocr_crop(
+    preprocess_result = _preprocess_ocr_crop(
         center_crop,
         scale=preprocess_scale,
         threshold=preprocess_threshold,
+        save_intermediate_images=save_debug_images,
     )
+
+    if save_debug_images:
+        preprocessed_crop, preprocess_images = preprocess_result
+    else:
+        preprocessed_crop = preprocess_result
+        preprocess_images = None
 
     if save_debug_images:
         screenshot_path, crop_path, preprocessed_path = _save_debug_images(
@@ -88,10 +99,8 @@ def extract_center_words_from_screen(
             center_crop,
             preprocessed_crop,
             debug_output_dir,
+            preprocess_images=preprocess_images,
         )
-        print("Full screenshot saved to:", screenshot_path)
-        print("Center crop saved to:", crop_path)
-        print("Preprocessed crop saved to:", preprocessed_path)
 
     try:
         ocr_data = pytesseract.image_to_data(
@@ -140,11 +149,15 @@ def _normalize_percentage_coordinate(value, name):
     raise ValueError(f"{name} must be between 0 and 1, or between 0 and 100.")
 
 
-def _preprocess_ocr_crop(image, scale=3, threshold=180):
+def _preprocess_ocr_crop(image, scale=3, threshold=180, save_intermediate_images=False):
     """
     Prepare a cropped image for OCR by increasing its size and simplifying it.
     """
+    intermediate_images = {} if save_intermediate_images else None
+
     grayscale_image = ImageOps.grayscale(image)
+    if intermediate_images is not None:
+        intermediate_images["grayscale"] = grayscale_image.copy()
 
     if scale and scale > 1:
         resized_size = (
@@ -154,18 +167,74 @@ def _preprocess_ocr_crop(image, scale=3, threshold=180):
         resample_filter = getattr(Image, "Resampling", Image).LANCZOS
         grayscale_image = grayscale_image.resize(resized_size, resample=resample_filter)
 
+    if intermediate_images is not None:
+        intermediate_images["resized"] = grayscale_image.copy()
+
     grayscale_image = ImageOps.autocontrast(grayscale_image)
+    if intermediate_images is not None:
+        intermediate_images["autocontrast"] = grayscale_image.copy()
 
-    if threshold is not None:
-        grayscale_image = grayscale_image.point(
-            lambda pixel: 255 if pixel > int(threshold) else 0,
-            mode="1",
-        ).convert("L")
-
-    return grayscale_image
+    # if threshold is not None:
+    #     grayscale_image = grayscale_image.point(
+    #         lambda pixel: 255 if pixel > int(threshold) else 0,
+    #         mode="1",
+    #     ).convert("L")
 
 
-def _save_debug_images(screenshot, center_crop, preprocessed_crop, debug_output_dir):
+    # Convert PIL image to OpenCV format
+    cv_image = np.array(grayscale_image)
+    
+    
+    # Apply Adaptive Threshold
+    # 255: Value to give if pixel exceeds threshold
+    # ADAPTIVE_THRESH_GAUSSIAN_C: Uses a weighted sum of neighborhood
+    # THRESH_BINARY: Standard black/white
+    # 11: Block size (must be odd). Larger = more global; Smaller = more local.
+    # 2: Constant subtracted from the mean
+    # processed = cv2.adaptiveThreshold(cv_image, 255, 
+    #                                 cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+    #                                 cv2.THRESH_BINARY, 11, 2)
+    # adaptive_thresh_image = Image.fromarray(processed)
+    # if intermediate_images is not None:
+    #     intermediate_images["adaptive_threshold"] = adaptive_thresh_image.copy()
+    # # Dilate to make text bolder
+    # kernel = np.ones((3,3), np.uint8) # A small 2x2 kernel
+
+    # # This will make the black lines (text and borders) thinner
+    # processed = cv2.dilate(cv_image, kernel, iterations=1)
+    
+    # 1. Find contours in the thresholded image
+    contours, _ = cv2.findContours(cv_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    processed = cv_image
+    if contours:
+        # Save all detected contours in red so contour detection can be inspected.
+        contour_debug_image = cv2.cvtColor(cv_image.copy(), cv2.COLOR_GRAY2BGR)
+        cv2.drawContours(contour_debug_image, contours, -1, (0, 0, 255), 2)
+        contour_debug_dir = Path("images") / "debug-crops"
+        contour_debug_dir.mkdir(parents=True, exist_ok=True)
+        contour_debug_path = contour_debug_dir / f"detected_contours_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+        cv2.imwrite(str(contour_debug_path), contour_debug_image)
+
+        # 2. Get the largest contour (the modal box)
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+
+        # 3. Crop slightly INSIDE the border (e.g., 10 pixels)
+        # to ensure the bold line is gone
+        padding = 10
+        crop_inner = cv_image[y + padding : y + h - padding, x + padding : x + w - padding]
+        processed = crop_inner
+
+    processed_image = Image.fromarray(processed)
+    
+    if intermediate_images is not None:
+        return processed_image, intermediate_images
+
+    return processed_image
+
+
+def _save_debug_images(screenshot, center_crop, preprocessed_crop, debug_output_dir, preprocess_images=None):
     """
     Save debug images and return absolute file paths.
     """
@@ -178,11 +247,24 @@ def _save_debug_images(screenshot, center_crop, preprocessed_crop, debug_output_
     screenshot_path = output_dir / f"screen_{timestamp}.png"
     crop_path = output_dir / f"center_crop_{timestamp}.png"
     preprocessed_path = output_dir / f"preprocessed_crop_{timestamp}.png"
+    grayscale_path = output_dir / f"preprocess_grayscale_{timestamp}.png"
+    resized_path = output_dir / f"preprocess_resized_{timestamp}.png"
+    autocontrast_path = output_dir / f"preprocess_autocontrast_{timestamp}.png"
+    adaptive_thresh_path = output_dir / f"preprocess_adaptive_threshold_{timestamp}.png"
 
     screenshot.save(screenshot_path)
     center_crop.save(crop_path)
     preprocessed_crop.save(preprocessed_path)
 
+    if preprocess_images:
+        if preprocess_images.get("grayscale") is not None:
+            preprocess_images["grayscale"].save(grayscale_path)
+        if preprocess_images.get("resized") is not None:
+            preprocess_images["resized"].save(resized_path)
+        if preprocess_images.get("autocontrast") is not None:
+            preprocess_images["autocontrast"].save(autocontrast_path)
+        if preprocess_images.get("adaptive_threshold") is not None:
+            preprocess_images["adaptive_threshold"].save(adaptive_thresh_path)
     return (
         str(screenshot_path.resolve()),
         str(crop_path.resolve()),
@@ -224,22 +306,20 @@ if __name__ == "__main__":
     target_phrase = "This invoice has not been paid in full"
     target_button1 = "Add Receipt"
     target_button2 = "Apply Deposit"
-    words = extract_center_words_from_screen(
-        x1=0.3433,
-        x2=0.5326,
-        y1=0.5658,
-        y2=0.6776,
-        save_debug_images=True
-    )
+    # words = extract_center_words_from_screen(
+    #     x1=0.3433,
+    #     x2=0.5326,
+    #     y1=0.5658,
+    #     y2=0.6776,
+    #     save_debug_images=True
+    # )
     
     # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
-    # words = extract_center_words_from_screen(
-    #     x1=0.6313,
-    #     x2=0.7676,
-    #     y1=0.3646,
-    #     y2=0.6424,
-    #     save_debug_images=True,
-    # )
+    time.sleep(5)  # Time to switch to the target screen before OCR
+    words = extract_center_words_from_screen(
+        **RETURN_REMAININGS_MODAL_COORDS,
+        save_debug_images=True,
+    )
     ocr_text = " ".join(words)
     # has_unpaid_invoice_text = target_phrase.lower() in ocr_text.lower()
 

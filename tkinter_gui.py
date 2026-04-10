@@ -244,7 +244,7 @@ class StoreCreditApp:
 
     def _run_deduct_process(self, csv_path):
         try:
-            result = auto_deduct_credit.pre_processing(
+            result = auto_deduct_credit.processing(
                 csv_path,
                 log_fn=self._queue_deduct_log,
                 should_stop_fn=self.deduct_stop_event.is_set,

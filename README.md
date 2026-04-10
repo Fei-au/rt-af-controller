@@ -14,7 +14,7 @@ python -m pyautogui
 
 ## Pack the app
 ```cmd
-pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller" --add-data=".env;." main.py
+pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller" --add-data=".env;." --hidden-import="pytesseract" main.py
 ```
 
 ## Rules
@@ -52,27 +52,8 @@ deduct credit
    2. add a field to record current credit left
 5. update the refunds status on db
 
+Alert
 
+1. Have an overall result output to somewhere, log the task result. And if it failed at certain record, send emails
 
-In the invoice
-for invoice in invoices:
-   while: true
-      words = get_words()
-      due_amount = get_due_amount_from_words()
-      apply_deposit: 
-      if apply_deposit:
-         click
-      else:
-         break
-      multi_credit_modal = get()
-      cur_credit_larger_than_due_amount_modal = get()
-
-      if multi_credit_modal:
-         dissmiss_multi_credit_modal
-         mark_the_first_credit_as_complete # invoices got from api should order by created_at asc
-      elif cur_credit_larger_than_due_amount_modal:
-
-
-      
-
-   
+1. In add credit, after filling the "Store credit-12345", information, copy paste to check if it's really at the step, if not, discard this one 
