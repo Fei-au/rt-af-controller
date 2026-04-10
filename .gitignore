@@ -1,6 +1,6 @@
 .venv
 .env
-images/
+images/archive/
 __pycache__/
 *.spec
 dist/
