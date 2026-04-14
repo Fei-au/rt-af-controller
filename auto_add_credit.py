@@ -3,7 +3,7 @@ import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
-from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, get_target_window, activate_window, select_item_by_name, select_item_by_tabbing, StopRequested
+from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
 from tools import extract_center_words_from_screen
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, AUCTION_FLEX_WINDOW_TITLE, IS_ONLINE, check_stop_requested, set_stop_checker
@@ -93,7 +93,7 @@ def run_add_store_credit_flow(
     select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
     time.sleep(3)
     # esc the edit modal
-    keyboard.press(Key.esc)
+    hotkey_combination([Key.esc])
     time.sleep(2)
     
     # reverse tab to select edit invoice button and click enter
@@ -103,11 +103,11 @@ def run_add_store_credit_flow(
     # select B.History
     check_stop_requested()
     time.sleep(0.5)
-    keyboard.press(Key.up)
+    hotkey_combination([Key.up])
     time.sleep(0.5)
-    keyboard.press(Key.up)
+    hotkey_combination([Key.up])
     time.sleep(0.5)
-    pyautogui.press("enter")
+    hotkey_combination([Key.enter])
     
     # select second title bar
     select_item_by_tabbing(5, confirm_with_enter=False)
@@ -122,15 +122,15 @@ def run_add_store_credit_flow(
     
     # click yes for popup modal
     check_stop_requested()
-    keyboard.press(Key.left)
+    hotkey_combination([Key.left])
     time.sleep(0.3)
-    keyboard.press(Key.enter)
+    hotkey_combination([Key.enter])
     time.sleep(2)
     
     # select payment type
     payment_type_index = PAYMENT_TYPE_DICT.get(payment_type, 6)
     for _ in range(payment_type_index):
-        keyboard.press(Key.down)
+        hotkey_combination([Key.down])
         time.sleep(0.5)
     
     # select amount field and input amount
@@ -152,24 +152,24 @@ def run_add_store_credit_flow(
 
     # save the form and close print preview
     for _ in range(2):
-        keyboard.press(Key.esc)
+        hotkey_combination([Key.esc])
     time.sleep(2)
         
     # back to invoice edit page and esc to exit
-    keyboard.press(Key.esc)
+    hotkey_combination([Key.esc])
     time.sleep(0.5)
-    keyboard.press(Key.esc)
+    hotkey_combination([Key.esc])
     time.sleep(1)
     
     # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
     words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
     has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
     if has_unpaid_invoice_text:
-        keyboard.press(Key.enter)
+        hotkey_combination([Key.enter])
         time.sleep(3)
         
     # exit to easy natigator page to select another auction
-    keyboard.press(Key.esc)
+    hotkey_combination([Key.esc])
     time.sleep(3)
     
     select_item_by_tabbing(7, reverse=True, confirm_with_enter=False)  # tab back to auction selection

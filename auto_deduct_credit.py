@@ -1,4 +1,5 @@
 from webbrowser import get
+import re
 
 import pygetwindow as gw
 import pyautogui
@@ -6,7 +7,7 @@ import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
 from pathlib import Path
-from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, set_stop_checker
+from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
 from service import read_deduct_records_from_csv
 from tools import extract_center_words_from_screen
 
@@ -83,19 +84,35 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
 		set_stop_checker(None)
   
 def back_to_invoice_list():
-    # back to invoice edit page and esc to exit
-    keyboard.press(Key.esc)
-    time.sleep(0.5)
-    keyboard.press(Key.esc)
-    time.sleep(1)
-    
+	# back to invoice edit page and esc to exit
+	hotkey_combination([Key.esc])
+	time.sleep(0.5)
+        
     # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
-    words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
-    has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
-    if has_unpaid_invoice_text:
-        keyboard.press(Key.enter)
-        time.sleep(3)
+	words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
+	has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
+	if has_unpaid_invoice_text:
+		hotkey_combination([Key.enter])
+		time.sleep(5)
+		return
+        
+	words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+	has_checkout_title = "check-out customers for auction" in " ".join(words).lower()
+	if has_checkout_title:
+		time.sleep(5)
+		return
 
+	hotkey_combination([Key.esc])
+	time.sleep(1)
+    
+	# if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
+	words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
+	has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
+	if has_unpaid_invoice_text:
+		hotkey_combination([Key.enter])
+		time.sleep(5)
+		return
+    
 '''
 Status codes:
 -1: Failed with error (check details for error message)
@@ -121,8 +138,37 @@ def is_multi_credit_modal():
 	summary_sentence = " ".join(words)
 	return "would you like to return the buyer" in summary_sentence.lower()
 
+def get_text_coordinates(text_area):
+	_, coordinates = extract_center_words_from_screen(
+		**text_area,
+		return_coordinates=True
+	)
+	quick_x = 0
+	quick_y = 0
+	info_x = 0
+	info_y = 0
+	for coor in coordinates:
+		if coor.get("text") == "QUICK":
+			quick_x = coor['x'] + coor['width']//2
+			quick_y = coor['y'] + coor['height']//2
+		if coor.get("text") == "INFO" and coor['y'] + coor['height']//2 >= quick_y - 10 and coor['y'] + coor['height']//2 <= quick_y + 10:
+			info_x = coor['x'] + coor['width']//2
+			info_y = coor['y'] + coor['height']//2
+   
+	if quick_x == 0 or quick_y == 0 or info_x == 0 or info_y == 0:
+		return 0,0
+
+	middle_x = (quick_x + info_x) // 2
+	middle_y = (quick_y + info_y) // 2
+
+	return middle_x, middle_y
+
 def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) -> str:
 	# input bid card number and click enter
+	select_item_by_tabbing(1, confirm_with_enter=False, reverse=True)
+	time.sleep(1)
+	select_item_by_tabbing(1, confirm_with_enter=False)
+	time.sleep(1)
 	select_item_by_name(
 		bidcard_num,
 		confirm_with_enter=True,
@@ -131,17 +177,28 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 
 	all_deducted_count = 0
 	has_partial_deduct = False
+ 
+	quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
+	if quick_info_x == 0 or quick_info_y == 0:
+		return [{
+			'status': '-1', 
+			'details': f"Failed to locate QUICK and INFO words, OCR might have failed for bidcard {bidcard_num}", 
+			'row_offset': deduct_record[i]['row_offset']
+		} for i in range(len(deduct_records))]
+	pyautogui.click(quick_info_x, quick_info_y)
+	time.sleep(1)
+ 
 	# check if there is "apply deposit" button
 	if not has_apply_deposit_button():
 		return [{
 			'status': '-1', 
 			'details': f"No credit to deduct for bidcard {bidcard_num}, invoice: {deduct_records[0]['invoice_number']}",
-			'row_offset': deduct_records[0]['row_offset']
-		}]
+			'row_offset': deduct_records[i]['row_offset']
+		} for i in range(len(deduct_records))]
 	print(f"Found 'Apply Deposit' button for bidcard {bidcard_num}, starting deduction...")
  
 	# focus and click appy deposit button
-	select_item_by_tabbing(3, confirm_with_enter=False, reverse=True)
+	select_item_by_tabbing(14, confirm_with_enter=False)
  
 	# deduct all credit
 	while True:
@@ -161,9 +218,8 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 			time.sleep(2)
 			print(f"Credit amount is larger than due amount for bidcard {bidcard_num}. Please manually review and return remaining credits to buyer if needed.")
 			has_partial_deduct = True
-			multi_credit_modal = True
    
-		multi_credit_modal = multi_credit_modal or is_multi_credit_modal()
+		multi_credit_modal = is_multi_credit_modal()
 		if multi_credit_modal:	
 			# click "no" to return remaining credits to buyer
 			print(f"Multi-credit modal detected for bidcard {bidcard_num}. Returning remaining credits to buyer.")
@@ -195,11 +251,11 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 	# select B.History
 	check_stop_requested()
 	time.sleep(0.5)
-	keyboard.press(Key.up)
+	hotkey_combination([Key.up])
 	time.sleep(0.5)
-	keyboard.press(Key.up)
+	hotkey_combination([Key.up])
 	time.sleep(0.5)
-	pyautogui.press("enter")
+	hotkey_combination([Key.enter])
 
 	# select second title bar
 	select_item_by_tabbing(5, confirm_with_enter=False)
@@ -217,9 +273,9 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 	select_item_by_tabbing(5, confirm_with_enter=False)
 	time.sleep(0.5)
 	for i in range(5):
-		keyboard.press(Key.page_down)
+		hotkey_combination([Key.page_down])
 		time.sleep(0.1)
-		keyboard.release(Key.page_down)
+		hotkey_combination([Key.page_down])
 		time.sleep(0.1)
 	time.sleep(1.5)
 	errors = []
@@ -231,7 +287,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 		# escape the loop
 		i += 1
 		print("before click enter")
-		pyautogui.press("enter")
+		hotkey_combination([Key.enter])
 		time.sleep(1)
 
 		# skip to non input focus
@@ -263,7 +319,19 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 		
 		# check if the invoice is fully deducted
 		amount_remaining_idx = scetence.index("amount remaining:") + len("amount remaining:")
-		is_completed = "0.00" in scetence[amount_remaining_idx+1:]
+		remaining_text = scetence[amount_remaining_idx:]
+		remaining_match = re.search(r"-?\d+(?:\.\d+)?", remaining_text.replace(",", ""))
+		if not remaining_match:
+			errors.append(f"Unable to parse amount remaining for {cur_sc_invoice_number}, OCR result: {scetence}")
+			hotkey_combination([Key.esc])
+			time.sleep(1)
+			hotkey_combination([Key.up])
+			time.sleep(1)
+			continue
+
+		amount_remaining = float(remaining_match.group())
+		# Treat only exact zero or small negative rounding (e.g. -0.02) as completed.
+		is_completed = (-1.0 < amount_remaining <= 0.0)
 	
 		if cur_sc_invoice_number in credit_invoices:
 			if not is_completed:
@@ -282,9 +350,9 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 		else:
 			errors.append(f"Invoice {cur_sc_invoice_number} not found in records, OCR result: {scetence}")
    
-		pyautogui.press("esc")
+		hotkey_combination([Key.esc])
 		time.sleep(1)
-		pyautogui.press("up")
+		hotkey_combination([Key.up])
 		time.sleep(1)
 
 	# Append errors

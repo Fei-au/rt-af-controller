@@ -50,6 +50,20 @@ CREDIT_DETAILS_COORDS = {
     "y2": 0.6776,
 }
 
+QUICK_INFO_COORDS = {
+    "x1": 0.3,
+    "x2": 0.6,
+    "y1": 0.3,
+    "y2": 0.7,
+}
+
+CHECK_OUT_TITLE_COORDS = {
+    "x1": 0.2,
+    "x2": 0.5,
+    "y1": 0.2,
+    "y2": 0.5,
+}
+
 
 
 _STOP_CHECKER = None

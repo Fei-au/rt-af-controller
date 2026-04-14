@@ -1,6 +1,7 @@
 .venv
 .env
 images/archive/
+images/debug-crops/
 __pycache__/
 *.spec
 dist/

@@ -11,8 +11,8 @@ from PIL import Image, ImageOps
 import cv2
 import numpy as np
 from pynput.keyboard import Key, Controller
-from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, INVOIE_SUMMARY_BLOCK_COORDS, RETURN_REMAININGS_MODAL_COORDS, PRINTER_POPUP_COORDS, CREDIT_DETAILS_COORDS
-
+from auto_common import CHECK_OUT_TITLE_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, INVOIE_SUMMARY_BLOCK_COORDS, RETURN_REMAININGS_MODAL_COORDS, PRINTER_POPUP_COORDS, CREDIT_DETAILS_COORDS
+from auto_common import select_item_by_tabbing, hotkey_combination
 
 keyboard = Controller()
 
@@ -27,7 +27,8 @@ def extract_center_words_from_screen(
     debug_output_dir="images/debug-crops",
     preprocess_scale=3,
     preprocess_threshold=180,
-    kernel_size=(2,2)
+    kernel_size=(2,2),
+    return_coordinates=False,
 ):
     """
     Take a full-screen screenshot, crop by percentage coordinates,
@@ -43,6 +44,9 @@ def extract_center_words_from_screen(
 
         The crop is preprocessed before OCR by converting to grayscale, scaling it
         up, and applying a contrast-friendly binary threshold.
+
+        Set return_coordinates=True to also return word bounding boxes. The
+        returned coordinates are in absolute screen pixels.
     """
     try:
         pytesseract = importlib.import_module("pytesseract")
@@ -120,8 +124,19 @@ def extract_center_words_from_screen(
         ) from exc
 
     words = []
-    for raw_text, raw_conf in zip(ocr_data.get("text", []), ocr_data.get("conf", [])):
+    word_coordinates = []
+    ocr_scale = int(preprocess_scale) if preprocess_scale and preprocess_scale > 1 else 1
+    texts = ocr_data.get("text", [])
+    confidences = ocr_data.get("conf", [])
+    lefts = ocr_data.get("left", [])
+    tops = ocr_data.get("top", [])
+    widths = ocr_data.get("width", [])
+    heights = ocr_data.get("height", [])
+
+    for i, raw_text in enumerate(texts):
+        raw_conf = confidences[i] if i < len(confidences) else -1
         text = str(raw_text).strip()
+
         if not text:
             continue
 
@@ -131,7 +146,30 @@ def extract_center_words_from_screen(
             confidence = -1
 
         if confidence >= confidence_threshold:
+            raw_left = int(lefts[i]) if i < len(lefts) else 0
+            raw_top = int(tops[i]) if i < len(tops) else 0
+            raw_width = int(widths[i]) if i < len(widths) else 0
+            raw_height = int(heights[i]) if i < len(heights) else 0
+
+            left = int(round(raw_left / ocr_scale))
+            top = int(round(raw_top / ocr_scale))
+            width = int(round(raw_width / ocr_scale))
+            height = int(round(raw_height / ocr_scale))
+
             words.append(text)
+            word_coordinates.append(
+                {
+                    "text": text,
+                    "confidence": confidence,
+                    "x": crop_left + left,
+                    "y": crop_top + top,
+                    "width": width,
+                    "height": height,
+                }
+            )
+
+    if return_coordinates:
+        return words, word_coordinates
 
     return words
 
@@ -300,16 +338,34 @@ if __name__ == "__main__":
     
     # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
     time.sleep(5)  # Time to switch to the target screen before OCR
-    words = extract_center_words_from_screen(
-        **PRINTER_POPUP_COORDS,
-        save_debug_images=True,
-    )
-    ocr_text = " ".join(words)
+    # words, coordinates = extract_center_words_from_screen(
+    #     x1=0.3, x2=0.6, y1=0.3, y2=0.7,
+    #     # save_debug_images=True,
+    #     return_coordinates=True
+    # )
+    # quick_x = 0
+    # quick_y = 0
+    # info_x = 0
+    # info_y = 0
+    # for coor in coordinates:
+    #     if coor.get("text") == "QUICK":
+    #         quick_x = coor['x'] + coor['width']//2
+    #         quick_y = coor['y'] + coor['height']//2
+    #     if coor.get("text") == "INFO" and coor['y'] + coor['height']//2 >= quick_y - 5 and coor['y'] + coor['height']//2 <= quick_y + 5:
+    #         info_x = coor['x'] + coor['width']//2
+    #         info_y = coor['y'] + coor['height']//2
+    # if quick_x == 0 or quick_y == 0 or info_x == 0 or info_y == 0:
+    #     print("Failed to locate QUICK and INFO words, OCR might have failed.")
+    #     print("OCR-detected words and coordinates:", coordinates)
+    # middle_x = (quick_x + info_x) // 2
+    # middle_y = (quick_y + info_y) // 2
+    # # print(f"QUICK center: ({quick_x}, {quick_y})")
+    # # print(f"INFO center: ({info_x}, {info_y})")
+    # pyautogui.click(middle_x, middle_y)
     # has_unpaid_invoice_text = target_phrase.lower() in ocr_text.lower()
 
     # has_add_receipt_button = target_button1.lower() in ocr_text.lower()
     # has_apply_deposit_button = target_button2.lower() in ocr_text.lower()
-    print("OCR-detected words in center area:", words)
     # print(f"Unpaid:", has_unpaid_invoice_text)
     # print(f"Has '{target_button1}':", has_add_receipt_button)
     # print(f"Has '{target_button2}':", has_apply_deposit_button)
@@ -324,3 +380,20 @@ if __name__ == "__main__":
     # # Get the data
     # field_value = pyperclip.paste()
     # print(f"The value is: {field_value}")
+    
+    # hotkey_combination([Key.esc])
+    # time.sleep(1)
+    # hotkey_combination([Key.up])
+    # time.sleep(1)
+    # print("Returning to invoice list...")
+    # hotkey_combination([Key.esc])
+    # time.sleep(0.5)
+    # hotkey_combination([Key.esc])
+    # time.sleep(1)
+    
+    # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
+    words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS, save_debug_images=True)
+    print("check-out customers for auction", words)
+    has_unpaid_invoice_text = "check-out customers for auction".lower() in " ".join(words).lower()
+    if has_unpaid_invoice_text:
+        print("Found the check-out customers for auction text, clicking enter to confirm...")
