@@ -132,7 +132,7 @@ def select_item_by_name(
 
     if confirm_with_enter:
         check_stop_requested()
-        pyautogui.press("enter")
+        hotkey_combination([Key.enter])
 
     return True
 
@@ -172,7 +172,7 @@ def select_item_by_tabbing(
         time.sleep(tab_delay)
     
     if confirm_with_enter:
-        pyautogui.press("enter")
+        hotkey_combination([Key.enter])
     
     return True
 

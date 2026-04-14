@@ -33,11 +33,11 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
 
 		# Open auction flex software
 		pyautogui.write(str("auc"), interval=0.1)
-		pyautogui.press("enter")
+		hotkey_combination([Key.enter])
 		time.sleep(5)
   
 		# Open autction list
-		pyautogui.press("enter")
+		hotkey_combination([Key.enter])
 		time.sleep(1.5)
 		# select auction id in modal
 		select_item_by_name(
@@ -68,7 +68,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
 			results = auto_processing(bidcard_num, deduct_records, log_fn)
 	
 			for result in results:
-				print(result)
+				log_fn(result)
 				df.at[result["row_offset"], "status"] = result.get("status")
 				df.at[result["row_offset"], "details"] = result.get("details")
 				df.at[result["row_offset"], "errors"] = result.get("errors")
@@ -183,7 +183,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 		return [{
 			'status': '-1', 
 			'details': f"Failed to locate QUICK and INFO words, OCR might have failed for bidcard {bidcard_num}", 
-			'row_offset': deduct_record[i]['row_offset']
+			'row_offset': deduct_records[i]['row_offset']
 		} for i in range(len(deduct_records))]
 	pyautogui.click(quick_info_x, quick_info_y)
 	time.sleep(1)
@@ -195,7 +195,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 			'details': f"No credit to deduct for bidcard {bidcard_num}, invoice: {deduct_records[0]['invoice_number']}",
 			'row_offset': deduct_records[i]['row_offset']
 		} for i in range(len(deduct_records))]
-	print(f"Found 'Apply Deposit' button for bidcard {bidcard_num}, starting deduction...")
+	log_fn(f"Found 'Apply Deposit' button for bidcard {bidcard_num}, starting deduction...")
  
 	# focus and click appy deposit button
 	select_item_by_tabbing(14, confirm_with_enter=False)
@@ -212,20 +212,20 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 			# dismiss the model
 			select_item_by_tabbing(3, confirm_with_enter=False)
 			time.sleep(0.5)
-			pyautogui.press("right")
+			hotkey_combination([Key.right])
 			time.sleep(0.5)
-			pyautogui.press("enter")
-			time.sleep(2)
-			print(f"Credit amount is larger than due amount for bidcard {bidcard_num}. Please manually review and return remaining credits to buyer if needed.")
+			hotkey_combination([Key.enter])
+			time.sleep(3)
+			log_fn(f"Credit amount is larger than due amount for bidcard {bidcard_num}. Please manually review and return remaining credits to buyer if needed.")
 			has_partial_deduct = True
    
 		multi_credit_modal = is_multi_credit_modal()
 		if multi_credit_modal:	
 			# click "no" to return remaining credits to buyer
-			print(f"Multi-credit modal detected for bidcard {bidcard_num}. Returning remaining credits to buyer.")
-			pyautogui.press("right")
+			log_fn(f"Multi-credit modal detected for bidcard {bidcard_num}. Returning remaining credits to buyer.")
+			hotkey_combination([Key.right])
 			time.sleep(0.5)
-			pyautogui.press("enter")
+			hotkey_combination([Key.enter])
 			time.sleep(2)
 
 		# Move out of the button for the next OCR to work
@@ -235,7 +235,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 			break
 		all_deducted_count += 1
 		if not has_apply_deposit_button():
-			print(f"All credits deducted for bidcard {bidcard_num}.")
+			log_fn(f"All credits deducted for bidcard {bidcard_num}.")
 			break
 
 
@@ -277,7 +277,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 		time.sleep(0.1)
 		hotkey_combination([Key.page_down])
 		time.sleep(0.1)
-	time.sleep(1.5)
+	time.sleep(1)
 	errors = []
 	i = 0
 	last_credit = None
@@ -286,16 +286,14 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 		check_stop_requested()
 		# escape the loop
 		i += 1
-		print("before click enter")
 		hotkey_combination([Key.enter])
-		time.sleep(1)
+		time.sleep(2)
 
 		# skip to non input focus
 		select_item_by_tabbing(1, confirm_with_enter=False)
 		time.sleep(1)
 		copy()
 		cur_store_credit = paste()
-		print(f"pasted store credit: {cur_store_credit}")
 		# if the store credit is the same as last one, it means we have reached the end of the list, break the loop to avoid infinite loop
 		if cur_store_credit == last_credit:
 			same_credit_count += 1
@@ -311,8 +309,8 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 			continue
 		cur_sc_invoice_number = cur_sc_invoice[1].strip()
 		words = extract_center_words_from_screen(**CREDIT_DETAILS_COORDS, save_debug_images=True, kernel_size=(3,3))
-		print("words:", words)
 		scetence = " ".join(words).lower()
+		log_fn(f"{cur_sc_invoice_number}: {scetence}")
 		if ("amount returned:" not in scetence) or ("amount remaining:" not in scetence):
 			errors.append(f"OCR failed {cur_sc_invoice_number} with: {scetence}")
 			continue
