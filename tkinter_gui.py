@@ -24,7 +24,6 @@ class StoreCreditApp:
 
         self.add_csv_path_var = tk.StringVar(value=getattr(auto_add_credit, "CSV_FILE_PATH", ""))
         self.deduct_csv_path_var = tk.StringVar(value=getattr(auto_deduct_credit, "CSV_FILE_PATH", ""))
-        self.lot_tab_count_var = tk.StringVar(value=str(getattr(auto_add_credit, "LOT_TAB_COUNT", 10)))
 
         self._build_ui()
         self.root.after(100, self._drain_log_queue)
@@ -62,13 +61,6 @@ class StoreCreditApp:
             text="Browse",
             command=lambda: self._browse_file(self.add_csv_path_var, "Store credit adding file"),
         ).pack(side=tk.LEFT, padx=(8, 0))
-
-        lot_tab_row = ttk.Frame(frame)
-        lot_tab_row.pack(fill=tk.X, pady=(10, 0))
-
-        ttk.Label(lot_tab_row, text="Lot tab count:").pack(side=tk.LEFT, padx=(0, 8))
-        self.lot_tab_count_entry = ttk.Entry(lot_tab_row, textvariable=self.lot_tab_count_var, width=10)
-        self.lot_tab_count_entry.pack(side=tk.LEFT)
 
         add_action_row = ttk.Frame(frame)
         add_action_row.pack(fill=tk.X, pady=(10, 0))
@@ -139,19 +131,8 @@ class StoreCreditApp:
             return
 
         csv_path = self.add_csv_path_var.get().strip()
-        lot_tab_count_raw = self.lot_tab_count_var.get().strip()
         if not csv_path:
             messagebox.showerror("Missing file", "Please select the store credit adding file first.")
-            return
-
-        try:
-            lot_tab_count = int(lot_tab_count_raw)
-        except ValueError:
-            messagebox.showerror("Invalid lot tab count", "Lot tab count must be an integer.")
-            return
-
-        if lot_tab_count <= 0:
-            messagebox.showerror("Invalid lot tab count", "Lot tab count must be greater than 0.")
             return
 
         file_path = Path(csv_path)
@@ -169,11 +150,11 @@ class StoreCreditApp:
         self.add_start_btn.configure(state=tk.DISABLED)
         self.add_stop_btn.configure(state=tk.NORMAL)
         self.deduct_start_btn.configure(state=tk.DISABLED)
-        self._queue_add_log(f"Starting process with lot tab count: {lot_tab_count}...")
+        self._queue_add_log("Starting process...")
 
         self.add_worker_thread = threading.Thread(
             target=self._run_add_process,
-            args=(csv_path, lot_tab_count),
+            args=(csv_path,),
             daemon=True,
         )
         self.add_worker_thread.start()
@@ -228,13 +209,12 @@ class StoreCreditApp:
             self.deduct_stop_btn.configure(state=tk.DISABLED)
             self._queue_deduct_log("Deduct stop requested. Attempting to stop immediately...")
 
-    def _run_add_process(self, csv_path, lot_tab_count):
+    def _run_add_process(self, csv_path):
         try:
             result = auto_add_credit.pre_processing(
                 csv_path,
                 log_fn=self._queue_add_log,
                 should_stop_fn=self.add_stop_event.is_set,
-                lot_tab_count=lot_tab_count,
             )
             self._queue_add_log(str(result))
         except Exception as exc:

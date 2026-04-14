@@ -3,7 +3,8 @@ import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
-from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
+from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
+from auto_deduct_credit import get_text_coordinates
 from tools import extract_center_words_from_screen
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, AUCTION_FLEX_WINDOW_TITLE, IS_ONLINE, check_stop_requested, set_stop_checker
@@ -13,7 +14,6 @@ keyboard = Controller()
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.1
 
-LOT_TAB_COUNT = 12
 CSV_FILE_PATH = ""
 
 PAYMENT_TYPE_DICT = {
@@ -38,7 +38,6 @@ def run_add_store_credit_flow(
     payment_type,
     amount,
     invoice_number,
-    lot_tab_count=LOT_TAB_COUNT,
 ):
     # Click select auction button
     window = get_target_window(AUCTION_FLEX_WINDOW_TITLE)
@@ -76,10 +75,15 @@ def run_add_store_credit_flow(
     # skip n tabs if there is a apply 
     
     # select lot and click enter
-    select_item_by_tabbing(
-        lot_tab_count,
-        confirm_with_enter=False,
-    )
+    quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
+    if quick_info_x == 0 or quick_info_y == 0:
+        return f"Failed to locate quick info text area for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+    
+    pyautogui.click(quick_info_x, quick_info_y)
+    time.sleep(0.5)
+    
+    select_item_by_tabbing(6, confirm_with_enter=False)  # select invoice number field
+    
     time.sleep(1)
     
     # input lot number and click enter
@@ -178,16 +182,9 @@ def run_add_store_credit_flow(
     return f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
 
     
-def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None, lot_tab_count=10):
+def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
     set_stop_checker(should_stop_fn)
     try:
-        try:
-            parsed_lot_tab_count = int(lot_tab_count)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Lot tab count must be an integer.") from exc
-
-        if parsed_lot_tab_count <= 0:
-            raise ValueError("Lot tab count must be greater than 0.")
 
         records = read_records_from_csv(csv_file_path)
         
@@ -219,7 +216,6 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None, lot_tab_cou
                 "payment_type": record["payment_type"],
                 "amount": record["amount"],
                 "invoice_number": record["invoice_number"],
-                "lot_tab_count": parsed_lot_tab_count,
             }
 
             if IS_ONLINE:
