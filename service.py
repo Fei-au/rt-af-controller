@@ -347,8 +347,3 @@ def upload_file_to_s3(csv_file_path, *, timeout=30, headers=None):
         return response.json()
     except ValueError:
         return {"message": response.text}
-
-if __name__ == "__main__":
-    LOG_BACK = "http://127.0.0.1:8008"
-    res = upload_file_to_s3(r"C:\Users\KY\Downloads\store_credit_detail_280_20260415_154350.csv")
-    print(res)
