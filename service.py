@@ -271,3 +271,46 @@ def add_store_credit_refund_invoice(refund_id, *, timeout=15, headers=None):
         raise RuntimeError("GraphQL response missing 'addStoreCreditRefundInvoice' field")
 
     return result["addStoreCreditRefundInvoice"]
+
+
+def complete_refund_invoice(refund_id, *, timeout=15, headers=None):
+    """
+    Mark a refund invoice as completed via GraphQL mutation.
+    """
+    graphql_mutation = gql(
+        """
+        mutation CompleteRefundInvoice($input: CompleteRefundInvoiceInput!) {
+            completeRefundInvoice(input: $input) {
+                modified_count: modifiedCount
+            }
+        }
+        """
+    )
+
+    transport_headers = {"Accept": "application/json"}
+    if headers:
+        transport_headers.update(headers)
+
+    transport = RequestsHTTPTransport(
+        url=GRAPHQL_URL,
+        headers=transport_headers,
+        timeout=timeout,
+        verify=True,
+    )
+
+    variables = {
+        "input": {
+            "refundId": str(refund_id),
+        }
+    }
+
+    try:
+        with Client(transport=transport, fetch_schema_from_transport=False) as session:
+            result = session.execute(graphql_mutation, variable_values=variables)
+    except Exception as exc:
+        raise RuntimeError(f"GraphQL mutation failed: {exc}") from exc
+
+    if "completeRefundInvoice" not in result:
+        raise RuntimeError("GraphQL response missing 'completeRefundInvoice' field")
+
+    return result["completeRefundInvoice"]

@@ -8,7 +8,7 @@ import pandas as pd
 from pynput.keyboard import Key, Controller
 from pathlib import Path
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
-from service import read_deduct_records_from_csv
+from service import complete_refund_invoice, read_deduct_records_from_csv
 from tools import extract_center_words_from_screen
 
 keyboard = Controller()
@@ -73,7 +73,21 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
 				df.at[result["row_offset"], "details"] = result.get("details")
 				df.at[result["row_offset"], "errors"] = result.get("errors")
 				if result["status"] == '1' and IS_ONLINE:
-					# TODO: update the record in db as completed with completed time
+					sc_id = str(df.at[result["row_offset"], "sc_id"]).strip()
+					if sc_id:
+						try:
+							complete_refund_invoice(sc_id)
+						except Exception as exc:
+							error_message = f"Failed to mark refund {sc_id} complete: {exc}"
+							existing_errors = df.at[result["row_offset"], "errors"]
+							if existing_errors:
+								df.at[result["row_offset"], "errors"] = f"{existing_errors}; {error_message}"
+							else:
+								df.at[result["row_offset"], "errors"] = error_message
+							log_fn(error_message)
+					else:
+						log_fn(f"Missing sc_id for row {result['row_offset']}, skip completion update.")
+
 					log_fn(f"Success: {result['details']}")
 			df.to_csv(csv_file_path, index=False)
 			time.sleep(2)
