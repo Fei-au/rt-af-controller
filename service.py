@@ -2,6 +2,7 @@
 
 import os
 import gql
+import requests
 from gql.transport.requests import RequestsHTTPTransport
 from gql import Client, gql
 from pathlib import Path
@@ -314,3 +315,40 @@ def complete_refund_invoice(refund_id, *, timeout=15, headers=None):
         raise RuntimeError("GraphQL response missing 'completeRefundInvoice' field")
 
     return result["completeRefundInvoice"]
+
+
+def upload_file_to_s3(csv_file_path, *, timeout=30, headers=None):
+    """
+    Upload a CSV file to LOG_BACK /s3/upload as multipart form-data.
+    """
+    file_path = Path(csv_file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {file_path}")
+
+    upload_url = f"{LOG_BACK.rstrip('/')}/s3/upload"
+    request_headers = {}
+    if headers:
+        request_headers.update(headers)
+
+    with file_path.open("rb") as csv_file:
+        response = requests.post(
+            upload_url,
+            files={"file": (file_path.name, csv_file, "text/csv")},
+            headers=request_headers,
+            timeout=timeout,
+        )
+
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(f"CSV upload failed: {response.status_code} {response.text}") from exc
+
+    try:
+        return response.json()
+    except ValueError:
+        return {"message": response.text}
+
+if __name__ == "__main__":
+    LOG_BACK = "http://127.0.0.1:8008"
+    res = upload_file_to_s3(r"C:\Users\KY\Downloads\store_credit_detail_280_20260415_154350.csv")
+    print(res)

@@ -8,7 +8,7 @@ import pandas as pd
 from pynput.keyboard import Key, Controller
 from pathlib import Path
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
-from service import complete_refund_invoice, read_deduct_records_from_csv
+from service import complete_refund_invoice, read_deduct_records_from_csv, upload_file_to_s3
 from tools import extract_center_words_from_screen
 
 keyboard = Controller()
@@ -90,9 +90,21 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
 
 					log_fn(f"Success: {result['details']}")
 			df.to_csv(csv_file_path, index=False)
+			if IS_ONLINE:
+				try:
+					upload_file_to_s3(csv_file_path)
+				except Exception as exc:
+					log_fn(f"Failed to upload deduct CSV to S3: {exc}")
 			time.sleep(2)
 			back_to_invoice_list()
-   
+		# After processing all records, save the final results to CSV
+		df.to_csv(csv_file_path, index=False)
+		if IS_ONLINE:
+			try:
+				upload_file_to_s3(csv_file_path)
+			except Exception as exc:
+				log_fn(f"Failed to upload final deduct CSV to S3: {exc}")
+		
 		return f"Deduct process completed for {len(records)} records."
 	finally:
 		set_stop_checker(None)
