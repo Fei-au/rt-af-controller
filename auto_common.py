@@ -51,9 +51,9 @@ CREDIT_DETAILS_COORDS = {
 }
 
 QUICK_INFO_COORDS = {
-    "x1": 0.3,
+    "x1": 0.2,
     "x2": 0.6,
-    "y1": 0.3,
+    "y1": 0.2,
     "y2": 0.7,
 }
 
