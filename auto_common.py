@@ -64,6 +64,13 @@ CHECK_OUT_TITLE_COORDS = {
     "y2": 0.5,
 }
 
+EASY_NAVIGATOR_TITLE_COORDS = {
+    "x1": 0.2,
+    "x2": 0.6,
+    "y1": 0.2,
+    "y2": 0.6,
+}
+
 
 
 _STOP_CHECKER = None
@@ -98,6 +105,8 @@ def check_stop_requested():
 class StopRequested(Exception):
     """Raised when user requests stopping the automation immediately."""
     
+class MulStepError(Exception):
+    """Raised when a multi-step process encounters an error, with details on which step failed."""
     
 def get_target_window(window_title_partial):
     windows = gw.getWindowsWithTitle(window_title_partial)

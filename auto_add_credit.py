@@ -3,7 +3,7 @@ import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
-from auto_common import INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
+from auto_common import EASY_NAVIGATOR_TITLE_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
 from auto_deduct_credit import get_text_coordinates
 from tools import extract_center_words_from_screen
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
@@ -257,7 +257,7 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                     log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
             
             df.to_csv(csv_file_path, index=False)
-            
+            check_resume_status()
         return 'All records processed successfully.'
     except StopRequested as e:
         return str(e)
@@ -272,5 +272,10 @@ status
 -1: Partially successful
 '''
 
-
+def check_resume_status():
+    words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS, save_debug_images=True)
+    has_easy_navigator_text = "easy navigator".lower() in " ".join(words).lower()
+    if not has_easy_navigator_text:
+        raise Exception("Not in easy navigator page, current page might be frozen, please check the application.")
+    
 
