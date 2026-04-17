@@ -98,6 +98,8 @@ def check_stop_requested():
 class StopRequested(Exception):
     """Raised when user requests stopping the automation immediately."""
     
+class MulStepError(Exception):
+    """Raised when a multi-step process encounters an error, with details on which step failed."""
     
 def get_target_window(window_title_partial):
     windows = gw.getWindowsWithTitle(window_title_partial)
