@@ -64,6 +64,13 @@ CHECK_OUT_TITLE_COORDS = {
     "y2": 0.5,
 }
 
+EASY_NAVIGATOR_TITLE_COORDS = {
+    "x1": 0.2,
+    "x2": 0.6,
+    "y1": 0.2,
+    "y2": 0.6,
+}
+
 
 
 _STOP_CHECKER = None
