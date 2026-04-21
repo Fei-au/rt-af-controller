@@ -298,7 +298,10 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 
     credit_invoices = {}
     for deduct_record in deduct_records:
-        credit_invoices[deduct_record["sc_invoice_number"]] = deduct_record
+        sc_invoice_number = deduct_record["sc_invoice_number"]
+        if sc_invoice_number not in credit_invoices:
+            credit_invoices[sc_invoice_number] = []
+        credit_invoices[sc_invoice_number].append(deduct_record)
     # credit invoices on file
     results = []
     # select the list of credits
@@ -359,18 +362,35 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             is_completed = (-1.0 < amount_remaining <= 0.0)
         
             if cur_sc_invoice_number in credit_invoices:
+                matched_records = credit_invoices[cur_sc_invoice_number]
+                target_record = None
+                processed_row_offsets = {
+                    result['row_offset']
+                    for result in results
+                    if result.get('row_offset') is not None
+                }
+                for matched_record in reversed(matched_records):
+                    if matched_record['row_offset'] not in processed_row_offsets:
+                        target_record = matched_record
+                        break
+
+                if not target_record:
+                    raise MulStepError(
+                        f"Invoice {cur_sc_invoice_number} has no remaining unassigned records to update."
+                    )
+
                 if not is_completed:
                     results.append({
                         'status': '2',
                         'details': f"Partial credit has been deducted, remaining amount: {amount_remaining}",
-                        'row_offset': credit_invoices[cur_sc_invoice_number]['row_offset']
+                        'row_offset': target_record['row_offset']
                     })
                 else:
                     # update the record in db as completed with completed time
                     results.append({
                         'status': '1',
                         'details': "",
-                        'row_offset': credit_invoices[cur_sc_invoice_number]['row_offset']
+                        'row_offset': target_record['row_offset']
                     })
             else:
                 raise MulStepError(f"Invoice {cur_sc_invoice_number} not found in records, OCR result: {scetence}")
