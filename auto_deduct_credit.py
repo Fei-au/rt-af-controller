@@ -49,6 +49,11 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
         # select checkout bidders and click enter
         select_item_by_tabbing(7)
         time.sleep(2)
+        
+        checkout_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+        has_auction_id = any(str(auction_id) in word for word in checkout_title_ocr_result)
+        if not has_auction_id:
+            return f"Failed to enter the correct auction page for auction id {auction_id}."
 
         # selct invoices and click enter
         select_item_by_tabbing(10)
