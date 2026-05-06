@@ -3,7 +3,7 @@ import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
-from auto_common import EASY_NAVIGATOR_TITLE_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
+from auto_common import CHECK_OUT_TITLE_COORDS, EASY_NAVIGATOR_TITLE_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
 from auto_deduct_credit import get_text_coordinates
 from tools import extract_center_words_from_screen
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
@@ -77,7 +77,7 @@ def run_add_store_credit_flow(
     # select lot and click enter
     quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
     if quick_info_x == 0 or quick_info_y == 0:
-        return f"Failed to locate quick info text area for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+        return -1, f"Failed to locate quick info text area for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
     
     pyautogui.click(quick_info_x, quick_info_y)
     time.sleep(0.5)
@@ -103,7 +103,11 @@ def run_add_store_credit_flow(
     # reverse tab to select edit invoice button and click enter
     select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
     time.sleep(3)
-    
+    editing_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+    has_editing_title = "editing customer for invoice" in " ".join(editing_title_ocr_result).lower()
+    if not has_editing_title:
+        return -1, f"Failed to open invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+
     # select B.History
     check_stop_requested()
     time.sleep(0.5)
@@ -130,12 +134,17 @@ def run_add_store_credit_flow(
     time.sleep(0.3)
     hotkey_combination([Key.enter])
     time.sleep(2)
-    
+
+    edit_deposit_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+    has_deposit_title = "edit this buyer deposit" in " ".join(edit_deposit_ocr_result).lower()
+    if not has_deposit_title:
+        return -1, f"Failed to open add store credit page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+
     # select payment type
     payment_type_index = PAYMENT_TYPE_DICT.get(payment_type, 6)
     for _ in range(payment_type_index):
         hotkey_combination([Key.down])
-        time.sleep(0.5)
+        time.sleep(0.2)
     
     # select amount field and input amount
     select_item_by_tabbing(1, confirm_with_enter=False)
@@ -148,7 +157,6 @@ def run_add_store_credit_flow(
     time.sleep(0.5)
     check_stop_requested()
     pyautogui.write("Store credit-" + str(invoice_number), interval=0.1)
-    print("Note entered:", "Store credit-" + str(invoice_number))
     time.sleep(0.5)
     select_item_by_tabbing(2, confirm_with_enter=False)
     time.sleep(0.5)
@@ -178,37 +186,64 @@ def run_add_store_credit_flow(
     
     select_item_by_tabbing(7, reverse=True, confirm_with_enter=False)  # tab back to auction selection
     time.sleep(1)
-        
-    return f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+
+    return 1, f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
 
     
+def _escape_to_easy_navigator(log_fn=print, max_esc=15):
+    """
+    Recovery: repeatedly press ESC (handling popups that require Enter instead),
+    until the Easy Navigator screen is detected.
+    Returns True if recovery succeeded.
+    """
+    for _ in range(max_esc):
+        words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS)
+        if "easy navigator" in " ".join(words).lower():
+            return True
+
+        # Some modals cannot be dismissed by ESC — detect and confirm with Enter.
+        modal_words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
+        modal_text = " ".join(modal_words).lower()
+        if "not been paid in full" in modal_text or "return" in modal_text:
+            log_fn("Recovery: closing modal with Enter.")
+            hotkey_combination([Key.enter])
+            time.sleep(1.5)
+            continue
+
+        hotkey_combination([Key.esc])
+        time.sleep(1)
+
+    words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS)
+    return "easy navigator" in " ".join(words).lower()
+
+
 def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
     set_stop_checker(should_stop_fn)
     try:
 
         records = read_records_from_csv(csv_file_path)
-        
+
         # Activate cloud window
         window = get_target_window(AUCTION_FLEX_CLOUD_TITLE)
         activate_window(window)
         time.sleep(1)
-        
+
         # Open auction flex software
         pyautogui.write(str("auc"), interval=0.1)
         pyautogui.press("enter")
         time.sleep(5)
 
         # Read records from CSV in the project root.
-        
+
         df = pd.read_csv(csv_file_path, encoding="utf-8-sig", dtype=str, keep_default_na=False)
-        
+
         for record in records:
             check_stop_requested()
             if record["status"] == '1' or record["status"] == '-1':
                 # log_fn(f"{record['invoice_number']}: Skipped as already processed in CSV.")
                 # df.to_csv(csv_file_path, index=False)
                 continue
-            
+
             flow_args = {
                 "target_auction_id": record["target_auction_id"],
                 "bidcard_num": record["bidcard_num"],
@@ -233,31 +268,55 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                 is_store_credit = graphql_result.get("isStoreCredit", False)
                 is_completed = graphql_result.get("hasCompleted", False)
                 is_voided = graphql_result.get("hasVoided", False)
-                
+
                 invalid_store_credit = store_credit_added  or not is_store_credit or is_voided or is_completed
-                
+
                 if invalid_store_credit:
                     df.at[record["row_offset"], "status"] = '0'
                     df.at[record["row_offset"], "details"] = f'Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}' + df.at[record["row_offset"], "details"]
                     df.to_csv(csv_file_path, index=False)
                     log_fn(f"{record['invoice_number']}: Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}")
                     continue
-            check_stop_requested()
-            msg = run_add_store_credit_flow(**flow_args)
-            log_fn(msg)
-            
-            df.at[record["row_offset"], "status"] = '1'
-            if IS_ONLINE:
-                mutation_result = add_store_credit_refund_invoice(record["refund_id"])
-                modified_count = int(mutation_result.get("modified_count", 0) or 0)
 
-                if modified_count == 0:
+            try:
+                check_stop_requested()
+                result, msg = run_add_store_credit_flow(**flow_args)
+                log_fn(msg)
+                if result != 1:
                     df.at[record["row_offset"], "status"] = '-1'
-                    df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
-                    log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
-            
-            df.to_csv(csv_file_path, index=False)
-            check_resume_status()
+                    df.at[record["row_offset"], "details"] = msg + df.at[record["row_offset"], "details"]
+                    raise Exception(msg)
+
+                df.at[record["row_offset"], "status"] = '1'
+                if IS_ONLINE:
+                    mutation_result = add_store_credit_refund_invoice(record["refund_id"])
+                    modified_count = int(mutation_result.get("modified_count", 0) or 0)
+
+                    if modified_count == 0:
+                        df.at[record["row_offset"], "status"] = '-1'
+                        df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
+                        log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
+
+                df.to_csv(csv_file_path, index=False)
+                check_resume_status()
+
+            except StopRequested:
+                raise
+            except Exception as e:
+                log_fn(f"{record['invoice_number']}: Flow error — {e}. Recovering to Easy Navigator.")
+                df.at[record["row_offset"], "errors"] = str(e)
+                if df.at[record["row_offset"], "status"] != '1':
+                    df.at[record["row_offset"], "status"] = '-1'
+                df.to_csv(csv_file_path, index=False)
+
+                recovered = _escape_to_easy_navigator(log_fn)
+                if recovered:
+                    select_item_by_tabbing(7, reverse=True, confirm_with_enter=False)
+                    time.sleep(1)
+                    log_fn(f"{record['invoice_number']}: Recovered — resuming with next record.")
+                else:
+                    log_fn(f"{record['invoice_number']}: Recovery failed — app may need manual attention.")
+
         return 'All records processed successfully.'
     except StopRequested as e:
         return str(e)
