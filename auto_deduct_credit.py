@@ -88,7 +88,6 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
                     else:
                         log_fn(f"Missing sc_id for row {result['row_offset']}, skip completion update.")
 
-                    log_fn(f"Success: {result['details']}")
             df.to_csv(csv_file_path, index=False)
             back_to_invoice_list()
         # After processing all records, save the final results to CSV
@@ -105,10 +104,10 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
                 pass
   
 def back_to_invoice_list():
-    for _ in range(4):
+    for _ in range(5):
         # back to invoice edit page and esc to exit
         hotkey_combination([Key.esc])
-        time.sleep(1)
+        time.sleep(0.5)
 
         # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
         words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
@@ -123,11 +122,20 @@ def back_to_invoice_list():
         if has_checkout_title:
             time.sleep(5)
             return
+        
+        multi_credit_modal = is_multi_credit_modal()
+        if multi_credit_modal:
+            hotkey_combination([Key.right])
+            time.sleep(0.5)
+            hotkey_combination([Key.enter])
+            time.sleep(1)
+        
     raise MulStepError()
 
 '''
 Status codes:
 -1: Failed with error (check details for error message)
+0: Deducted but failed to verify
 1: Success
 2: only a partial credit was deducted
 '''
@@ -207,7 +215,6 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             'details': f"No credit to deduct for bidcard {bidcard_num}, invoice: {deduct_records[0]['invoice_number']}",
             'row_offset': deduct_records[i]['row_offset']
         } for i in range(len(deduct_records))]
-    log_fn(f"Found 'Apply Deposit' button for bidcard {bidcard_num}, starting deduction...")
  
     # focus and click appy deposit button
     select_item_by_tabbing(14, confirm_with_enter=False)
@@ -228,13 +235,13 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             time.sleep(0.5)
             hotkey_combination([Key.enter])
             time.sleep(3)
-            log_fn(f"Credit amount is larger than due amount for bidcard {bidcard_num}. Please manually review and return remaining credits to buyer if needed.")
+            # log_fn(f"Credit amount is larger than due amount for bidcard {bidcard_num}. Please manually review and return remaining credits to buyer if needed.")
             has_partial_deduct = True
    
         multi_credit_modal = is_multi_credit_modal()
         if multi_credit_modal:	
             # click "no" to return remaining credits to buyer
-            log_fn(f"Multi-credit modal detected for bidcard {bidcard_num}. Returning remaining credits to buyer.")
+            # log_fn(f"Multi-credit modal detected for bidcard {bidcard_num}. Returning remaining credits to buyer.")
             hotkey_combination([Key.right])
             time.sleep(0.5)
             hotkey_combination([Key.enter])
@@ -247,7 +254,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             break
         all_deducted_count += 1
         if not has_apply_deposit_button():
-            log_fn(f"All credits deducted for bidcard {bidcard_num}.")
+            # log_fn(f"All credits deducted for bidcard {bidcard_num}.")
             break
 
 
@@ -287,6 +294,16 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
     time.sleep(0.5)
     hotkey_combination([Key.up])
     time.sleep(0.5)
+    
+    editing_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+    has_editing_title = "editing customer for invoice" in " ".join(editing_title_ocr_result).lower()
+    if not has_editing_title:
+        return [{
+            'status': '0', 
+            'details': f"Credit may be fully deducted but failed to open invoice detail page {bidcard_num}-{deduct_records[0]['invoice_number']}", 
+            'row_offset': deduct_records[i]['row_offset']
+        } for i in range(len(deduct_records))]
+    
     hotkey_combination([Key.enter])
 
     # select second title bar
@@ -323,7 +340,14 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
         i += 1
         hotkey_combination([Key.enter])
         time.sleep(2)
-  
+        edit_deposit_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+        has_deposit_title = "edit this buyer deposit" in " ".join(edit_deposit_ocr_result).lower()
+        if not has_deposit_title:
+            return [{
+                'status': '0',
+                'details': f"Fully deducted but failed to open deposit detail page {bidcard_num}-{deduct_records[0]['invoice_number']}",
+                'row_offset': deduct_records[i]['row_offset']
+            } for i in range(len(deduct_records))]
         try:
             # skip to non input focus
             select_item_by_tabbing(1, confirm_with_enter=False)
@@ -345,7 +369,6 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             cur_sc_invoice_number = cur_sc_invoice[1].strip()
             words = extract_center_words_from_screen(**CREDIT_DETAILS_COORDS, save_debug_images=True, kernel_size=(3,3))
             scetence = " ".join(words).lower()
-            log_fn(f"{cur_sc_invoice_number}: {scetence}")
             if ("amount returned:" not in scetence) or ("amount remaining:" not in scetence):
                 raise MulStepError(f"OCR failed {cur_sc_invoice_number} with: {scetence}")
             
