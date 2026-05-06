@@ -38,6 +38,7 @@ def run_add_store_credit_flow(
     payment_type,
     amount,
     invoice_number,
+    on_credit_saved=None,
 ):
     # Click select auction button
     window = get_target_window(AUCTION_FLEX_WINDOW_TITLE)
@@ -166,7 +167,10 @@ def run_add_store_credit_flow(
     for _ in range(2):
         hotkey_combination([Key.esc])
     time.sleep(2)
-        
+
+    if on_credit_saved is not None:
+        on_credit_saved()
+
     # back to invoice edit page and esc to exit
     hotkey_combination([Key.esc])
     time.sleep(0.5)
@@ -189,6 +193,17 @@ def run_add_store_credit_flow(
 
     return 1, f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
 
+    
+def sync_credit_saved(record, df, csv_file_path, log_fn):
+    df.at[record["row_offset"], "status"] = '1'
+    if IS_ONLINE:
+        mutation_result = add_store_credit_refund_invoice(record["refund_id"])
+        modified_count = int(mutation_result.get("modified_count", 0) or 0)
+        if modified_count == 0:
+            df.at[record["row_offset"], "status"] = '-1'
+            df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
+            log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
+    df.to_csv(csv_file_path, index=False)
     
 def _escape_to_easy_navigator(log_fn=print, max_esc=15):
     """
@@ -277,10 +292,13 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                     df.to_csv(csv_file_path, index=False)
                     log_fn(f"{record['invoice_number']}: Invalid store credit record with isStoreCredit: {is_store_credit}, hasCompleted: {is_completed}, hasVoided: {is_voided}, storeCreditAdded: {store_credit_added}")
                     continue
-
+            
             try:
                 check_stop_requested()
-                result, msg = run_add_store_credit_flow(**flow_args)
+                result, msg = run_add_store_credit_flow(
+                    **flow_args,
+                    on_credit_saved=lambda: sync_credit_saved(record, df, csv_file_path, log_fn),
+                )
                 log_fn(msg)
                 if result != 1:
                     df.at[record["row_offset"], "status"] = '-1'
