@@ -11,7 +11,7 @@ from PIL import Image, ImageOps
 import cv2
 import numpy as np
 from pynput.keyboard import Key, Controller
-from auto_common import CHECK_OUT_TITLE_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, INVOIE_SUMMARY_BLOCK_COORDS, RETURN_REMAININGS_MODAL_COORDS, PRINTER_POPUP_COORDS, CREDIT_DETAILS_COORDS
+from auto_common import CHECK_OUT_TITLE_COORDS, INVOICE_NUMBER_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, INVOIE_SUMMARY_BLOCK_COORDS, RETURN_REMAININGS_MODAL_COORDS, PRINTER_POPUP_COORDS, CREDIT_DETAILS_COORDS
 from auto_common import select_item_by_tabbing, hotkey_combination
 
 keyboard = Controller()
@@ -324,6 +324,14 @@ def _resolve_tesseract_executable_path():
     return None
 
 
+def is_in_right_invoice_page(invoice_number):
+    invoice_number = str(invoice_number).strip()
+    words = extract_center_words_from_screen(**INVOICE_NUMBER_COORDS, kernel_size=(3,3))
+    for word in words:
+        if invoice_number in word:
+            return True
+    return False
+
 if __name__ == "__main__":
     target_phrase = "This invoice has not been paid in full"
     target_button1 = "Add Receipt"
@@ -338,11 +346,12 @@ if __name__ == "__main__":
     
     # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
     time.sleep(5)  # Time to switch to the target screen before OCR
-    # words, coordinates = extract_center_words_from_screen(
-    #     x1=0.3, x2=0.6, y1=0.3, y2=0.7,
-    #     # save_debug_images=True,
-    #     return_coordinates=True
-    # )
+    words, coordinates = extract_center_words_from_screen(
+        x1=0.55, x2=0.75, y1=0.3, y2=0.5,
+        save_debug_images=True,
+        return_coordinates=True
+    )
+    print("OCR-detected words:", words)
     # quick_x = 0
     # quick_y = 0
     # info_x = 0
@@ -392,8 +401,8 @@ if __name__ == "__main__":
     # time.sleep(1)
     
     # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
-    words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS, save_debug_images=True)
-    print("check-out customers for auction", words)
-    has_unpaid_invoice_text = "check-out customers for auction".lower() in " ".join(words).lower()
-    if has_unpaid_invoice_text:
-        print("Found the check-out customers for auction text, clicking enter to confirm...")
+    # words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS, save_debug_images=True)
+    # print("check-out customers for auction", words)
+    # has_unpaid_invoice_text = "check-out customers for auction".lower() in " ".join(words).lower()
+    # if has_unpaid_invoice_text:
+    #     print("Found the check-out customers for auction text, clicking enter to confirm...")

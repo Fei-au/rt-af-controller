@@ -71,6 +71,13 @@ EASY_NAVIGATOR_TITLE_COORDS = {
     "y2": 0.6,
 }
 
+INVOICE_NUMBER_COORDS = {
+    "x1": 0.55,
+    "x2": 0.75,
+    "y1": 0.3,
+    "y2": 0.5
+}
+
 
 
 _STOP_CHECKER = None

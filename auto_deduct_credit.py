@@ -7,9 +7,9 @@ import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
 from pathlib import Path
-from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, MulStepError, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
+from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_NUMBER_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, MulStepError, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
 from service import complete_refund_invoice, read_deduct_records_from_csv, upload_file_to_s3
-from tools import extract_center_words_from_screen
+from tools import extract_center_words_from_screen, is_in_right_invoice_page
 
 keyboard = Controller()
 
@@ -198,6 +198,13 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
     all_deducted_count = 0
     has_partial_deduct = False
  
+    if not is_in_right_invoice_page(deduct_records[0]['invoice_number']):
+        return [{
+            'status': '-1', 
+            'details': f"Failed to enter the correct invoice page for bidcard {bidcard_num}, invoice: {deduct_records[0]['invoice_number']}", 
+            'row_offset': deduct_records[i]['row_offset']
+        } for i in range(len(deduct_records))]
+    
     quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
     if quick_info_x == 0 or quick_info_y == 0:
         return [{

@@ -5,7 +5,7 @@ import pandas as pd
 from pynput.keyboard import Key, Controller
 from auto_common import CHECK_OUT_TITLE_COORDS, EASY_NAVIGATOR_TITLE_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
 from auto_deduct_credit import get_text_coordinates
-from tools import extract_center_words_from_screen
+from tools import extract_center_words_from_screen, is_in_right_invoice_page
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, AUCTION_FLEX_WINDOW_TITLE, IS_ONLINE, check_stop_requested, set_stop_checker
 
@@ -73,8 +73,8 @@ def run_add_store_credit_flow(
     )
     time.sleep(3)
     
-    # skip n tabs if there is a apply 
-    
+    if not is_in_right_invoice_page(invoice_number):
+        return -1, f"Failed to enter the correct invoice page: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
     # select lot and click enter
     quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
     if quick_info_x == 0 or quick_info_y == 0:
