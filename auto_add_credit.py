@@ -219,7 +219,7 @@ def _escape_to_easy_navigator(log_fn=print, max_esc=15):
         # Some modals cannot be dismissed by ESC — detect and confirm with Enter.
         modal_words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
         modal_text = " ".join(modal_words).lower()
-        if "not been paid in full" in modal_text or "return" in modal_text:
+        if "not been paid in full" in modal_text:
             log_fn("Recovery: closing modal with Enter.")
             hotkey_combination([Key.enter])
             time.sleep(1.5)
