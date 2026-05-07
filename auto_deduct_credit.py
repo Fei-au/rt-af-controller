@@ -8,7 +8,7 @@ import pandas as pd
 from pynput.keyboard import Key, Controller
 from pathlib import Path
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_NUMBER_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, MulStepError, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
-from service import complete_refund_invoice, read_deduct_records_from_csv, upload_file_to_s3
+from service import complete_refund_invoice, read_deduct_records_from_csv
 from tools import extract_center_words_from_screen, is_in_right_invoice_page
 
 keyboard = Controller()
@@ -35,7 +35,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
         pyautogui.write(str("auc"), interval=0.1)
         hotkey_combination([Key.enter])
         time.sleep(5)
-  
+
         # Open autction list
         hotkey_combination([Key.enter])
         time.sleep(1.5)
@@ -49,7 +49,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
         # select checkout bidders and click enter
         select_item_by_tabbing(7)
         time.sleep(2)
-        
+
         checkout_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
         has_auction_id = any(str(auction_id) in word for word in checkout_title_ocr_result)
         if not has_auction_id:
@@ -65,13 +65,13 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
 
         for bidcard_num, deduct_records in records.items():
             check_stop_requested()
-   
+
             if any(deduct_record['status'] != "" for deduct_record in deduct_records):
                 log_fn(f"Skipping bidcard {bidcard_num} as it has already been processed.")
                 continue
 
             results = auto_processing(bidcard_num, deduct_records, log_fn)
-    
+
             for result in results:
                 log_fn(result)
                 df.at[result["row_offset"], "status"] = result.get("status")
@@ -95,6 +95,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
 
             df.to_csv(csv_file_path, index=False)
             back_to_invoice_list()
+
         # After processing all records, save the final results to CSV
         df.to_csv(csv_file_path, index=False)
         return f"Deduct process completed for {len(records)} records."
@@ -102,39 +103,40 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
         return f"Error navigating back to invoice list"
     finally:
         set_stop_checker(None)
-        if IS_ONLINE:
-            try:
-                upload_file_to_s3(csv_file_path)
-            except Exception as exc:
-                pass
   
-def back_to_invoice_list():
-    for _ in range(5):
-        # back to invoice edit page and esc to exit
-        hotkey_combination([Key.esc])
-        time.sleep(0.5)
-
-        # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
-        words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
-        has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
-        if has_unpaid_invoice_text:
-            hotkey_combination([Key.enter])
-            time.sleep(5)
-            return
-            
+def back_to_invoice_list(max_rounds=10):
+    """
+    Walk back from wherever auto_processing left the UI to the
+    "Check-out Customers for Auction" page, dismissing the known
+    intermediate modals along the way. Each round waits 1 s so the
+    page has time to render before the next OCR check.
+    """
+    for _ in range(max_rounds):
+        # 1. Already on the checkout page → done.
         words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-        has_checkout_title = "check-out customers for auction" in " ".join(words).lower()
-        if has_checkout_title:
-            time.sleep(5)
+        if "check-out customers for auction" in " ".join(words).lower():
+            time.sleep(1)
             return
-        
-        multi_credit_modal = is_multi_credit_modal()
-        if multi_credit_modal:
+
+        # 2. "Invoice not paid in full" modal — confirm with Enter.
+        words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
+        if "not been paid in full" in " ".join(words).lower():
+            hotkey_combination([Key.enter])
+            time.sleep(1)
+            continue
+
+        # 3. "Return remaining credits" multi-credit modal — answer No.
+        if is_multi_credit_modal():
             hotkey_combination([Key.right])
             time.sleep(0.5)
             hotkey_combination([Key.enter])
             time.sleep(1)
-        
+            continue
+
+        # 4. Otherwise step back one screen.
+        hotkey_combination([Key.esc])
+        time.sleep(1)
+
     raise MulStepError()
 
 '''
@@ -462,13 +464,5 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
 
     return results
     
-
-
-
-
-
-
-
-
 
 
