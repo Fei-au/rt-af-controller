@@ -6,6 +6,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 import auto_add_credit
 import auto_deduct_credit
+from auto_common import IS_ONLINE
+from service import upload_file_to_s3
 
 
 class StoreCreditApp:
@@ -242,6 +244,7 @@ class StoreCreditApp:
             self.deduct_start_btn.configure(state=tk.NORMAL)
         self.add_stop_event.clear()
         self._queue_add_log("Process finished.")
+        self._save_and_upload_logs(self.add_csv_path_var.get(), prefix="add")
 
     def _on_deduct_worker_done(self):
         self.deduct_start_btn.configure(state=tk.NORMAL)
@@ -250,6 +253,84 @@ class StoreCreditApp:
             self.add_start_btn.configure(state=tk.NORMAL)
         self.deduct_stop_event.clear()
         self._queue_deduct_log("Deduct process finished.")
+        self._save_and_upload_logs(self.deduct_csv_path_var.get(), prefix="deduct")
+
+    def _save_and_upload_logs(self, csv_path, prefix):
+        """
+        Persist the current log widget contents to a timestamped .log file and
+        (when IS_ONLINE) upload both the log file and the processed CSV to S3
+        on a background thread. Runs on the Tkinter main thread; drains pending
+        log queue first so the file captures every "Process finished." style
+        message.
+        """
+        # Drain anything still queued so the saved file is up to date.
+        self._drain_log_queue_now()
+
+        log_text = self.log_text.get("1.0", tk.END).rstrip()
+        if not log_text:
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_path = (csv_path or "").strip()
+        if csv_path:
+            base_dir = Path(csv_path).resolve().parent
+            stem = Path(csv_path).stem
+            log_file_path = base_dir / f"{stem}_{prefix}_{timestamp}.log"
+        else:
+            log_file_path = Path(__file__).resolve().parent / f"{prefix}_{timestamp}.log"
+
+        try:
+            log_file_path.write_text(log_text, encoding="utf-8")
+        except OSError as exc:
+            self._append_log_immediately(f"[{prefix.upper()}] Failed to write log file: {exc}")
+            return
+
+        self._append_log_immediately(f"[{prefix.upper()}] Logs saved to {log_file_path}")
+
+        if not IS_ONLINE:
+            return
+
+        threading.Thread(
+            target=self._upload_artifacts,
+            args=(log_file_path, csv_path, prefix),
+            daemon=True,
+        ).start()
+
+    def _upload_artifacts(self, log_file_path, csv_path, prefix):
+        log_fn = self._queue_add_log if prefix == "add" else self._queue_deduct_log
+
+        try:
+            upload_file_to_s3(str(log_file_path))
+            log_fn(f"Log uploaded: {log_file_path.name}")
+        except Exception as exc:
+            log_fn(f"Log upload failed: {exc}")
+
+        if csv_path and Path(csv_path).exists():
+            try:
+                upload_file_to_s3(csv_path)
+                log_fn(f"CSV uploaded: {Path(csv_path).name}")
+            except Exception as exc:
+                log_fn(f"CSV upload failed: {exc}")
+
+    def _drain_log_queue_now(self):
+        """Synchronously empty the queue into the widget. Main thread only."""
+        while not self.log_queue.empty():
+            try:
+                message = self.log_queue.get_nowait()
+            except queue.Empty:
+                break
+            self.log_text.configure(state=tk.NORMAL)
+            self.log_text.insert(tk.END, message + "\n")
+            self.log_text.see(tk.END)
+            self.log_text.configure(state=tk.DISABLED)
+
+    def _append_log_immediately(self, message):
+        """Write a timestamped line straight to the widget. Main thread only."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.log_text.configure(state=tk.NORMAL)
+        self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+        self.log_text.see(tk.END)
+        self.log_text.configure(state=tk.DISABLED)
 
     def _queue_add_log(self, message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

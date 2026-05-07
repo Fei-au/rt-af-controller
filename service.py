@@ -317,23 +317,36 @@ def complete_refund_invoice(refund_id, *, timeout=15, headers=None):
     return result["completeRefundInvoice"]
 
 
-def upload_file_to_s3(csv_file_path, *, timeout=30, headers=None):
+def upload_file_to_s3(csv_file_path, *, timeout=30, headers=None, content_type=None):
     """
-    Upload a CSV file to LOG_BACK /s3/upload as multipart form-data.
+    Upload a file to LOG_BACK /s3/upload as multipart form-data.
+
+    Despite the legacy name, this works for any file. ``content_type`` defaults
+    to a best-guess based on the file extension (.csv → text/csv, .log/.txt →
+    text/plain, anything else → application/octet-stream).
     """
     file_path = Path(csv_file_path)
     if not file_path.exists():
-        raise FileNotFoundError(f"CSV file not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    if content_type is None:
+        suffix = file_path.suffix.lower()
+        if suffix == ".csv":
+            content_type = "text/csv"
+        elif suffix in (".log", ".txt"):
+            content_type = "text/plain"
+        else:
+            content_type = "application/octet-stream"
 
     upload_url = f"{LOG_BACK.rstrip('/')}/s3/upload"
     request_headers = {}
     if headers:
         request_headers.update(headers)
 
-    with file_path.open("rb") as csv_file:
+    with file_path.open("rb") as upload_file:
         response = requests.post(
             upload_url,
-            files={"file": (file_path.name, csv_file, "text/csv")},
+            files={"file": (file_path.name, upload_file, content_type)},
             headers=request_headers,
             timeout=timeout,
         )
