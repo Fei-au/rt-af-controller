@@ -51,6 +51,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
         time.sleep(2)
 
         checkout_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+        log_fn(f"Checkout page title OCR result: {' '.join(checkout_title_ocr_result)}")
         has_auction_id = any(str(auction_id) in word for word in checkout_title_ocr_result)
         if not has_auction_id:
             return f"Failed to enter the correct auction page for auction id {auction_id}."
@@ -94,7 +95,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
                         log_fn(f"Missing sc_id for row {result['row_offset']}, skip completion update.")
 
             df.to_csv(csv_file_path, index=False)
-            back_to_invoice_list()
+            back_to_invoice_list(log_fn=log_fn)
 
         # After processing all records, save the final results to CSV
         df.to_csv(csv_file_path, index=False)
@@ -104,7 +105,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
     finally:
         set_stop_checker(None)
   
-def back_to_invoice_list(max_rounds=10):
+def back_to_invoice_list(log_fn=print, max_rounds=10):
     """
     Walk back from wherever auto_processing left the UI to the
     "Check-out Customers for Auction" page, dismissing the known
@@ -114,19 +115,21 @@ def back_to_invoice_list(max_rounds=10):
     for _ in range(max_rounds):
         # 1. Already on the checkout page → done.
         words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-        if "check-out customers for auction" in " ".join(words).lower():
+        log_fn(f"Checkout page title OCR result: {' '.join(words)}")
+        if "check-out customers" in " ".join(words).lower():
             time.sleep(1)
             return
 
         # 2. "Invoice not paid in full" modal — confirm with Enter.
         words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
+        log_fn(f"Invoice not paid in full modal OCR result: {' '.join(words)}")
         if "not been paid in full" in " ".join(words).lower():
             hotkey_combination([Key.enter])
             time.sleep(1)
             continue
 
         # 3. "Return remaining credits" multi-credit modal — answer No.
-        if is_multi_credit_modal():
+        if is_multi_credit_modal(log_fn):
             hotkey_combination([Key.right])
             time.sleep(0.5)
             hotkey_combination([Key.enter])
@@ -147,21 +150,21 @@ Status codes:
 2: only a partial credit was deducted
 '''
 
-def has_apply_deposit_button():
+def has_apply_deposit_button(log_fn=print):
     words = extract_center_words_from_screen(**INVOIE_SUMMARY_BLOCK_COORDS)
-    print("OCR-detected words in invoice summary block:", words)
+    log_fn(f"OCR-detected words in invoice summary block: {' '.join(words)}")
     summary_sentence = " ".join(words)
     return "apply deposit" in summary_sentence.lower() or "appty deposit" in summary_sentence.lower()
 
-def is_credit_larger_than_due_amount():
+def is_credit_larger_than_due_amount(log_fn=print):
     words = extract_center_words_from_screen(**PRINTER_POPUP_COORDS)
-    print("OCR-detected words in printer popup:", words)
+    log_fn(f"OCR-detected words in printer popup: {' '.join(words)}")
     summary_sentence = " ".join(words)
     return "printer" in summary_sentence.lower()
 
-def is_multi_credit_modal():
+def is_multi_credit_modal(log_fn=print):
     words = extract_center_words_from_screen(**RETURN_REMAININGS_MODAL_COORDS)
-    print("OCR-detected words in return remainings modal:", words)
+    log_fn(f"OCR-detected words in return remainings modal: {' '.join(words)}")
     summary_sentence = " ".join(words)
     return "would you like to return the buyer" in summary_sentence.lower()
 
@@ -223,7 +226,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
     time.sleep(1)
  
     # check if there is "apply deposit" button
-    if not has_apply_deposit_button():
+    if not has_apply_deposit_button(log_fn=log_fn):
         return [{
             'status': '-1', 
             'details': f"No credit to deduct for bidcard {bidcard_num}, invoice: {deduct_records[0]['invoice_number']}",
@@ -241,7 +244,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
         time.sleep(2)
   
         multi_credit_modal = False
-        if is_credit_larger_than_due_amount():
+        if is_credit_larger_than_due_amount(log_fn=log_fn):
             # dismiss the model
             select_item_by_tabbing(3, confirm_with_enter=False)
             time.sleep(0.5)
@@ -252,7 +255,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             # log_fn(f"Credit amount is larger than due amount for bidcard {bidcard_num}. Please manually review and return remaining credits to buyer if needed.")
             has_partial_deduct = True
    
-        multi_credit_modal = is_multi_credit_modal()
+        multi_credit_modal = is_multi_credit_modal(log_fn=log_fn)
         if multi_credit_modal:	
             # click "no" to return remaining credits to buyer
             # log_fn(f"Multi-credit modal detected for bidcard {bidcard_num}. Returning remaining credits to buyer.")
@@ -267,7 +270,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
         if has_partial_deduct:
             break
         all_deducted_count += 1
-        if not has_apply_deposit_button():
+        if not has_apply_deposit_button(log_fn=log_fn):
             # log_fn(f"All credits deducted for bidcard {bidcard_num}.")
             break
 
@@ -310,6 +313,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
     time.sleep(0.5)
     
     editing_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+    log_fn(f"Invoice detail page title OCR result: {' '.join(editing_title_ocr_result)}")
     has_editing_title = "editing customer for invoice" in " ".join(editing_title_ocr_result).lower()
     if not has_editing_title:
         return [{
@@ -355,6 +359,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
         hotkey_combination([Key.enter])
         time.sleep(2)
         edit_deposit_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+        log_fn(f"Deposit detail page title OCR result: {' '.join(edit_deposit_ocr_result)}")
         has_deposit_title = "edit this buyer deposit" in " ".join(edit_deposit_ocr_result).lower()
         if not has_deposit_title:
             return [{
@@ -381,8 +386,9 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             if len(cur_sc_invoice) != 2:
                 raise MulStepError(f"No invoice number found for: {cur_store_credit}")
             cur_sc_invoice_number = cur_sc_invoice[1].strip()
-            words = extract_center_words_from_screen(**CREDIT_DETAILS_COORDS, save_debug_images=True, kernel_size=(3,3))
+            words = extract_center_words_from_screen(**CREDIT_DETAILS_COORDS, kernel_size=(3,3))
             scetence = " ".join(words).lower()
+            log_fn(f"OCR-detected words in credit details: {scetence}")
             if ("amount returned:" not in scetence) or ("amount remaining:" not in scetence):
                 raise MulStepError(f"OCR failed {cur_sc_invoice_number} with: {scetence}")
             

@@ -78,7 +78,7 @@ def read_records_from_csv(csv_file_path):
                 "refund_id": str(row["refund_id"]).strip(),
                 "target_auction_id": int(row["target_auction_id"]),
                 "bidcard_num": int(row["bidcard_num"]),
-                "lot": int(row["lot"]),
+                "lot": str(row["lot"]).strip(),
                 "payment_type": str(row["payment_type"]).strip(),
                 "amount": float(row["amount"]),
                 "invoice_number": int(row["invoice_number"]),

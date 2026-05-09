@@ -59,9 +59,9 @@ QUICK_INFO_COORDS = {
 
 CHECK_OUT_TITLE_COORDS = {
     "x1": 0.2,
-    "x2": 0.5,
-    "y1": 0.2,
-    "y2": 0.5,
+    "x2": 0.6,
+    "y1": 0.3,
+    "y2": 0.6,
 }
 
 EASY_NAVIGATOR_TITLE_COORDS = {
@@ -165,7 +165,7 @@ def hotkey_combination(keys, delay_between_keys=0.1):
 
 def select_item_by_tabbing(
     click_times,
-    tab_delay=0.3,
+    tab_delay=0.2,
     confirm_with_enter=True,
     pre_tab_delay=0.2,
     reverse=False,

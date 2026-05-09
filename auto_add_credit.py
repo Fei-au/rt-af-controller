@@ -39,6 +39,7 @@ def run_add_store_credit_flow(
     amount,
     invoice_number,
     on_credit_saved=None,
+    log_fn=print,
 ):
     # Click select auction button
     window = get_target_window(AUCTION_FLEX_WINDOW_TITLE)
@@ -73,8 +74,8 @@ def run_add_store_credit_flow(
     )
     time.sleep(3)
     
-    if not is_in_right_invoice_page(invoice_number):
-        return -1, f"Failed to enter the correct invoice page: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+    # if not is_in_right_invoice_page(invoice_number):
+    #     return -1, f"Failed to enter the correct invoice page: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
     # select lot and click enter
     quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
     if quick_info_x == 0 or quick_info_y == 0:
@@ -83,32 +84,36 @@ def run_add_store_credit_flow(
     pyautogui.click(quick_info_x, quick_info_y)
     time.sleep(0.5)
     
-    select_item_by_tabbing(6, confirm_with_enter=False)  # select invoice number field
+    # select_item_by_tabbing(6, confirm_with_enter=False)  # select invoice number field
     
-    time.sleep(1)
+    # time.sleep(1)
     
-    # input lot number and click enter
-    select_item_by_name(
-        lot,
-        confirm_with_enter=True,
-    )
-    time.sleep(1)
+    # # input lot number and click enter
+    # select_item_by_name(
+    #     lot,
+    #     confirm_with_enter=True,
+    # )
+    # time.sleep(1)
     
-    # reverse tab to select edit item button and click enter
-    select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
-    time.sleep(3)
-    # esc the edit modal
-    hotkey_combination([Key.esc])
-    time.sleep(2)
+    # # reverse tab to select edit item button and click enter
+    # select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
+    # time.sleep(3)
+    # # esc the edit modal
+    # hotkey_combination([Key.esc])
+    # time.sleep(2)
     
     # reverse tab to select edit invoice button and click enter
-    select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
+    select_item_by_tabbing(4, confirm_with_enter=True, reverse=True)
     time.sleep(3)
     editing_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-    has_editing_title = "editing customer for invoice" in " ".join(editing_title_ocr_result).lower()
+    title_sentence = " ".join(editing_title_ocr_result).lower()
+    log_fn(f"Editing title OCR result: {title_sentence}")
+    has_editing_title = "editing customer" in title_sentence
     if not has_editing_title:
         return -1, f"Failed to open invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
-
+    is_in_invoice_page = str(invoice_number) in title_sentence
+    if not is_in_invoice_page:
+        return -1, f"Failed to enter the correct invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
     # select B.History
     check_stop_requested()
     time.sleep(0.5)
@@ -137,7 +142,9 @@ def run_add_store_credit_flow(
     time.sleep(2)
 
     edit_deposit_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-    has_deposit_title = "edit this buyer deposit" in " ".join(edit_deposit_ocr_result).lower()
+    sentence = " ".join(edit_deposit_ocr_result).lower()
+    log_fn(f"Edit deposit title OCR result: {sentence}")
+    has_deposit_title = "edit this buyer" in sentence
     if not has_deposit_title:
         return -1, f"Failed to open add store credit page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
 
@@ -179,7 +186,9 @@ def run_add_store_credit_flow(
     
     # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
     words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
-    has_unpaid_invoice_text = "This invoice has not been paid in full".lower() in " ".join(words).lower()
+    unpaid_sentence = " ".join(words).lower()
+    log_fn(f"Invoice paid full modal OCR result: {unpaid_sentence}")
+    has_unpaid_invoice_text = "This invoice has not".lower() in unpaid_sentence
     if has_unpaid_invoice_text:
         hotkey_combination([Key.enter])
         time.sleep(3)
@@ -197,30 +206,46 @@ def run_add_store_credit_flow(
 def sync_credit_saved(record, df, csv_file_path, log_fn):
     df.at[record["row_offset"], "status"] = '1'
     if IS_ONLINE:
+        print(f"Syncing store credit added status for refund_id: {record['refund_id']}")
         mutation_result = add_store_credit_refund_invoice(record["refund_id"])
+        print(f"GraphQL mutation result for refund_id {record['refund_id']}: {mutation_result}")
         modified_count = int(mutation_result.get("modified_count", 0) or 0)
         if modified_count == 0:
-            df.at[record["row_offset"], "status"] = '-1'
             df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
             log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
+        else:
+            log_fn(f"{record['invoice_number']}: Store credit added and database updated successfully")
     df.to_csv(csv_file_path, index=False)
     
-def _escape_to_easy_navigator(log_fn=print, max_esc=15):
+def _escape_to_easy_navigator(log_fn=print, max_esc=6):
     """
     Recovery: repeatedly press ESC (handling popups that require Enter instead),
     until the Easy Navigator screen is detected.
     Returns True if recovery succeeded.
     """
     for _ in range(max_esc):
+        check_stop_requested()
         words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS)
-        if "easy navigator" in " ".join(words).lower():
+        sentence = " ".join(words).lower()
+        log_fn(f"Easy navigator title OCR result during recovery: {sentence}")
+        if "easy navigator" in sentence:
             return True
 
         # Some modals cannot be dismissed by ESC — detect and confirm with Enter.
         modal_words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
-        modal_text = " ".join(modal_words).lower()
-        if "not been paid in full" in modal_text:
+        modal_sentence = " ".join(modal_words).lower()
+        log_fn(f"Invoice paid full modal OCR result: {modal_sentence}")
+        if "not been paid in full" in modal_sentence:
             log_fn("Recovery: closing modal with Enter.")
+            hotkey_combination([Key.enter])
+            time.sleep(1.5)
+            continue
+
+        
+        if "to be empty" in modal_sentence:
+            log_fn("Recovery: closing empty deposit modal with Enter.")
+            hotkey_combination([Key.left])
+            time.sleep(0.2)
             hotkey_combination([Key.enter])
             time.sleep(1.5)
             continue
@@ -298,25 +323,25 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                 result, msg = run_add_store_credit_flow(
                     **flow_args,
                     on_credit_saved=lambda: sync_credit_saved(record, df, csv_file_path, log_fn),
+                    log_fn=log_fn,
                 )
                 log_fn(msg)
-                if result != 1:
+                if result == -1:
                     df.at[record["row_offset"], "status"] = '-1'
                     df.at[record["row_offset"], "details"] = msg + df.at[record["row_offset"], "details"]
+                    df.to_csv(csv_file_path, index=False)
                     raise Exception(msg)
 
-                df.at[record["row_offset"], "status"] = '1'
-                if IS_ONLINE:
-                    mutation_result = add_store_credit_refund_invoice(record["refund_id"])
-                    modified_count = int(mutation_result.get("modified_count", 0) or 0)
+                # if IS_ONLINE:
+                #     mutation_result = add_store_credit_refund_invoice(record["refund_id"])
+                #     modified_count = int(mutation_result.get("modified_count", 0) or 0)
 
-                    if modified_count == 0:
-                        df.at[record["row_offset"], "status"] = '-1'
-                        df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
-                        log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
+                #     if modified_count == 0:
+                #         df.at[record["row_offset"], "status"] = '-1'
+                #         df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
+                #         log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
 
-                df.to_csv(csv_file_path, index=False)
-                check_resume_status()
+                check_resume_status(log_fn)
 
             except StopRequested:
                 raise
@@ -333,7 +358,7 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                     time.sleep(1)
                     log_fn(f"{record['invoice_number']}: Recovered — resuming with next record.")
                 else:
-                    log_fn(f"{record['invoice_number']}: Recovery failed — app may need manual attention.")
+                    raise Exception(f"{record['invoice_number']}: Recovery failed — app may need manual attention.")
 
         return 'All records processed successfully.'
     except StopRequested as e:
@@ -349,9 +374,11 @@ status
 -1: Partially successful
 '''
 
-def check_resume_status():
-    words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS, save_debug_images=True)
-    has_easy_navigator_text = "easy navigator".lower() in " ".join(words).lower()
+def check_resume_status(log_fn):
+    words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS)
+    sentence = " ".join(words).lower()
+    log_fn(f"Easy navigator OCR result: {sentence}")
+    has_easy_navigator_text = "easy navigator".lower() in sentence
     if not has_easy_navigator_text:
         raise Exception("Not in easy navigator page, current page might be frozen, please check the application.")
     

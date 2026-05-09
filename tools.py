@@ -347,7 +347,7 @@ if __name__ == "__main__":
     # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
     time.sleep(5)  # Time to switch to the target screen before OCR
     words, coordinates = extract_center_words_from_screen(
-        x1=0.55, x2=0.75, y1=0.3, y2=0.5,
+        **CHECK_OUT_TITLE_COORDS,
         save_debug_images=True,
         return_coordinates=True
     )
