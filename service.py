@@ -129,13 +129,13 @@ def read_deduct_records_from_csv(csv_file_path) -> tuple[int, dict[int, list[dic
         raise ValueError(f"Missing required CSV headers: {', '.join(missing_fields)}")
 
     if 'status' not in df.columns:
-        df['status'] = pd.NA
+        df['status'] = ""
         df.to_csv(csv_file_path, index=False)
     if 'details' not in df.columns:
-        df['details'] = pd.NA
+        df['details'] = ""
         df.to_csv(csv_file_path, index=False)
     if 'errors' not in df.columns:
-        df['errors'] = pd.NA
+        df['errors'] = ""
         df.to_csv(csv_file_path, index=False)
         
     records = {}
@@ -167,7 +167,6 @@ def read_deduct_records_from_csv(csv_file_path) -> tuple[int, dict[int, list[dic
                 })
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Invalid data at CSV row {row_index}: {row.to_dict()}") from exc
-
     if not records:
         raise ValueError("CSV file has no valid data rows")
 

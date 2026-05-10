@@ -49,9 +49,9 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
         # select checkout bidders and click enter
         select_item_by_tabbing(7)
         time.sleep(2)
-
+        # verify in right auction page
         checkout_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-        log_fn(f"Checkout page title OCR result: {' '.join(checkout_title_ocr_result)}")
+        log_fn(f"verify in right auction page OCR result: {' '.join(checkout_title_ocr_result)}")
         has_auction_id = any(str(auction_id) in word for word in checkout_title_ocr_result)
         if not has_auction_id:
             return f"Failed to enter the correct auction page for auction id {auction_id}."
@@ -208,7 +208,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
     all_deducted_count = 0
     has_partial_deduct = False
  
-    if not is_in_right_invoice_page(deduct_records[0]['invoice_number']):
+    if not is_in_right_invoice_page(bidcard_num, log_fn=log_fn):
         return [{
             'status': '-1', 
             'details': f"Failed to enter the correct invoice page for bidcard {bidcard_num}, invoice: {deduct_records[0]['invoice_number']}", 

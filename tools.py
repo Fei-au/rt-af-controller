@@ -324,11 +324,12 @@ def _resolve_tesseract_executable_path():
     return None
 
 
-def is_in_right_invoice_page(invoice_number):
-    invoice_number = str(invoice_number).strip()
+def is_in_right_invoice_page(bidcard_num, log_fn=print):
+    bidcard_num = str(bidcard_num).strip()
     words = extract_center_words_from_screen(**INVOICE_NUMBER_COORDS, kernel_size=(3,3))
+    log_fn(f"OCR-detected words for bidcard  number check: {" ".join(words).lower()}")
     for word in words:
-        if invoice_number in word:
+        if bidcard_num in word:
             return True
     return False
 
@@ -347,7 +348,7 @@ if __name__ == "__main__":
     # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
     time.sleep(5)  # Time to switch to the target screen before OCR
     words, coordinates = extract_center_words_from_screen(
-        **CHECK_OUT_TITLE_COORDS,
+        **CHECK_OUT_TITLE_COORDS, kernel_size=(3,3),
         save_debug_images=True,
         return_coordinates=True
     )
