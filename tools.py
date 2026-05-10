@@ -29,6 +29,7 @@ def extract_center_words_from_screen(
     preprocess_threshold=180,
     kernel_size=(2,2),
     return_coordinates=False,
+    screenshot=None,
 ):
     """
     Take a full-screen screenshot, crop by percentage coordinates,
@@ -47,6 +48,9 @@ def extract_center_words_from_screen(
 
         Set return_coordinates=True to also return word bounding boxes. The
         returned coordinates are in absolute screen pixels.
+
+        Pass a pre-captured PIL screenshot via `screenshot` to reuse it across
+        multiple OCR regions in the same UI state and avoid redundant captures.
     """
     try:
         pytesseract = importlib.import_module("pytesseract")
@@ -59,7 +63,8 @@ def extract_center_words_from_screen(
     if configured_tesseract_cmd:
         pytesseract.pytesseract.tesseract_cmd = configured_tesseract_cmd
 
-    screenshot = pyautogui.screenshot()
+    if screenshot is None:
+        screenshot = pyautogui.screenshot()
     screen_width, screen_height = screenshot.size
 
     x1_ratio = _normalize_percentage_coordinate(x1, "x1")

@@ -113,15 +113,18 @@ def back_to_invoice_list(log_fn=print, max_rounds=10):
     page has time to render before the next OCR check.
     """
     for _ in range(max_rounds):
+        # Capture once per round; reuse for all three OCR regions below.
+        screenshot = pyautogui.screenshot()
+
         # 1. Already on the checkout page → done.
-        words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
+        words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS, screenshot=screenshot)
         log_fn(f"Checkout page title OCR result: {' '.join(words)}")
         if "check-out customers" in " ".join(words).lower():
             time.sleep(1)
             return
 
         # 2. "Invoice not paid in full" modal — confirm with Enter.
-        words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
+        words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS, screenshot=screenshot)
         log_fn(f"Invoice not paid in full modal OCR result: {' '.join(words)}")
         if "not been paid in full" in " ".join(words).lower():
             hotkey_combination([Key.enter])
@@ -129,7 +132,7 @@ def back_to_invoice_list(log_fn=print, max_rounds=10):
             continue
 
         # 3. "Return remaining credits" multi-credit modal — answer No.
-        if is_multi_credit_modal(log_fn):
+        if is_multi_credit_modal(log_fn, screenshot=screenshot):
             hotkey_combination([Key.right])
             time.sleep(0.5)
             hotkey_combination([Key.enter])
@@ -162,8 +165,8 @@ def is_credit_larger_than_due_amount(log_fn=print):
     summary_sentence = " ".join(words)
     return "printer" in summary_sentence.lower()
 
-def is_multi_credit_modal(log_fn=print):
-    words = extract_center_words_from_screen(**RETURN_REMAININGS_MODAL_COORDS)
+def is_multi_credit_modal(log_fn=print, screenshot=None):
+    words = extract_center_words_from_screen(**RETURN_REMAININGS_MODAL_COORDS, screenshot=screenshot)
     log_fn(f"OCR-detected words in return remainings modal: {' '.join(words)}")
     summary_sentence = " ".join(words)
     return "would you like to return the buyer" in summary_sentence.lower()
