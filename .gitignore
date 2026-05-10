@@ -2,6 +2,7 @@
 .env
 images/archive/
 images/debug-crops/
+images/test-screens/
 __pycache__/
 *.spec
 dist/

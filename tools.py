@@ -338,77 +338,172 @@ def is_in_right_invoice_page(bidcard_num, log_fn=print):
             return True
     return False
 
-if __name__ == "__main__":
-    target_phrase = "This invoice has not been paid in full"
-    target_button1 = "Add Receipt"
-    target_button2 = "Apply Deposit"
-    # words = extract_center_words_from_screen(
-    #     x1=0.3433,
-    #     x2=0.5326,
-    #     y1=0.5658,
-    #     y2=0.6776,
-    #     save_debug_images=True
-    # )
-    
-    # words = extract_center_words_from_screen(x1=0.3633, x2=0.6426, y1=0.3958, y2=0.6076, save_debug_images=True)
-    time.sleep(5)  # Time to switch to the target screen before OCR
-    words, coordinates = extract_center_words_from_screen(
-        **CHECK_OUT_TITLE_COORDS, kernel_size=(3,3),
-        save_debug_images=True,
-        return_coordinates=True
-    )
-    print("OCR-detected words:", words)
-    # quick_x = 0
-    # quick_y = 0
-    # info_x = 0
-    # info_y = 0
-    # for coor in coordinates:
-    #     if coor.get("text") == "QUICK":
-    #         quick_x = coor['x'] + coor['width']//2
-    #         quick_y = coor['y'] + coor['height']//2
-    #     if coor.get("text") == "INFO" and coor['y'] + coor['height']//2 >= quick_y - 5 and coor['y'] + coor['height']//2 <= quick_y + 5:
-    #         info_x = coor['x'] + coor['width']//2
-    #         info_y = coor['y'] + coor['height']//2
-    # if quick_x == 0 or quick_y == 0 or info_x == 0 or info_y == 0:
-    #     print("Failed to locate QUICK and INFO words, OCR might have failed.")
-    #     print("OCR-detected words and coordinates:", coordinates)
-    # middle_x = (quick_x + info_x) // 2
-    # middle_y = (quick_y + info_y) // 2
-    # # print(f"QUICK center: ({quick_x}, {quick_y})")
-    # # print(f"INFO center: ({info_x}, {info_y})")
-    # pyautogui.click(middle_x, middle_y)
-    # has_unpaid_invoice_text = target_phrase.lower() in ocr_text.lower()
 
-    # has_add_receipt_button = target_button1.lower() in ocr_text.lower()
-    # has_apply_deposit_button = target_button2.lower() in ocr_text.lower()
-    # print(f"Unpaid:", has_unpaid_invoice_text)
-    # print(f"Has '{target_button1}':", has_add_receipt_button)
-    # print(f"Has '{target_button2}':", has_apply_deposit_button)
-    
-    # import time
+import cv2
+import numpy as np
+from pathlib import Path
+
+
+class ButtonDetector:
+    def __init__(self, template_paths, search_region_ratio=None):
+        """
+        template_paths: 模板图片路径列表，可以传 1-3 张冗余模板
+                        例如：完整按钮 + 单独的绿色✓图标
+        search_region_ratio: (x1_ratio, y1_ratio, x2_ratio, y2_ratio)
+                             例如 (0.75, 0.15, 1.0, 0.75) 表示只在右侧 Summary 区域搜
+                             None 表示全图搜
+        """
+        self.templates = []
+        for path in template_paths:
+            img = cv2.imread(str(path), cv2.IMREAD_COLOR)
+            if img is None:
+                raise FileNotFoundError(f"Cannot load template: {path}")
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            self.templates.append({
+                'name': Path(path).stem,
+                'gray': gray,
+                'h': gray.shape[0],
+                'w': gray.shape[1],
+            })
+        self.search_region_ratio = search_region_ratio
+
+        # Scale 范围：覆盖 1080p/2K/4K × 100/125/150% 全部组合
+        # 粗扫步长 0.1，细扫步长 0.02
+        self.coarse_scales = np.arange(0.9, 3.11, 0.1)
+        self.fine_step = 0.02
+        self.fine_window = 0.12  # 在最佳粗扫尺度 ±0.12 范围内细扫
+
+    def _crop_search_region(self, screenshot_gray):
+        if self.search_region_ratio is None:
+            return screenshot_gray, (0, 0)
+        h, w = screenshot_gray.shape
+        x1r, y1r, x2r, y2r = self.search_region_ratio
+        x1, y1 = int(w * x1r), int(h * y1r)
+        x2, y2 = int(w * x2r), int(h * y2r)
+        return screenshot_gray[y1:y2, x1:x2], (x1, y1)
+
+    def _match_at_scale(self, screenshot, template, scale):
+        new_w = int(template['w'] * scale)
+        new_h = int(template['h'] * scale)
+
+        # 模板不能比搜索区域大，也不能太小
+        if new_w >= screenshot.shape[1] or new_h >= screenshot.shape[0]:
+            return None
+        if new_w < 8 or new_h < 8:
+            return None
+
+        # 缩小用 INTER_AREA，放大用 INTER_CUBIC
+        interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC
+        resized = cv2.resize(template['gray'], (new_w, new_h), interpolation=interp)
+
+        result = cv2.matchTemplate(screenshot, resized, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        return {
+            'score': max_val,
+            'loc': max_loc,
+            'size': (new_w, new_h),
+            'scale': scale,
+        }
+
+    def _multi_scale_search(self, screenshot, template):
+        """两阶段：粗扫 + 细扫"""
+        # 阶段 1：粗扫
+        best = None
+        for scale in self.coarse_scales:
+            result = self._match_at_scale(screenshot, template, scale)
+            if result and (best is None or result['score'] > best['score']):
+                best = result
+        
+        if best is None:
+            return None
+
+        # 阶段 2：在最佳粗扫尺度附近细扫
+        center = best['scale']
+        fine_scales = np.arange(
+            max(0.9, center - self.fine_window),
+            min(3.1, center + self.fine_window) + self.fine_step,
+            self.fine_step,
+        )
+        for scale in fine_scales:
+            result = self._match_at_scale(screenshot, template, scale)
+            if result and result['score'] > best['score']:
+                best = result
+        
+        return best
+
+    def detect(self, screenshot_bgr, threshold=0.75, verbose=False):
+        """
+        返回 (是否检测到, 详细信息)
+        screenshot_bgr: cv2.imread 读出来的 BGR 图像
+        """
+        screenshot_gray = cv2.cvtColor(screenshot_bgr, cv2.COLOR_BGR2GRAY)
+        cropped, offset = self._crop_search_region(screenshot_gray)
+
+        results = []
+        for template in self.templates:
+            best = self._multi_scale_search(cropped, template)
+            if best is not None:
+                # 把坐标还原到全图
+                best['loc'] = (best['loc'][0] + offset[0], best['loc'][1] + offset[1])
+                best['template'] = template['name']
+                results.append(best)
+
+        if not results:
+            return False, {'reason': 'no match', 'all_results': []}
+
+        # 取所有模板里分数最高的
+        best_overall = max(results, key=lambda r: r['score'])
+        detected = best_overall['score'] >= threshold
+
+        if verbose:
+            print(f"[Detect] template={best_overall['template']} "
+                  f"score={best_overall['score']:.4f} "
+                  f"scale={best_overall['scale']:.2f} "
+                  f"loc={best_overall['loc']} "
+                  f"detected={detected}")
+
+        return detected, {
+            'best': best_overall,
+            'all_results': results,
+        }
+
+    def visualize(self, screenshot_bgr, detect_info, output_path='debug_match.png'):
+        """画出匹配框，调试用"""
+        if 'best' not in detect_info:
+            return
+        best = detect_info['best']
+        x, y = best['loc']
+        w, h = best['size']
+        out = screenshot_bgr.copy()
+        cv2.rectangle(out, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv2.putText(out, f"{best['score']:.3f} @ {best['scale']:.2f}x",
+                    (x, max(y - 8, 12)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        cv2.imwrite(output_path, out)
+
+
+if __name__ == "__main__":
     # time.sleep(5)  # Time to switch to the target screen before OCR
-    # # Select all and copy
-    # pyautogui.hotkey('ctrl', 'a')
-    # pyautogui.hotkey('ctrl', 'c')
-    # import pyperclip
-    # time.sleep(0.5)
-    # # Get the data
-    # field_value = pyperclip.paste()
-    # print(f"The value is: {field_value}")
+    # words, coordinates = extract_center_words_from_screen(
+    #     **CHECK_OUT_TITLE_COORDS, kernel_size=(3,3),
+    #     save_debug_images=True,
+    #     return_coordinates=True
+    # )
+    # print("OCR-detected words:", words)
+
+
+    detector = ButtonDetector(
+        template_paths=[
+            # 'images/apply-deposit/image-1080-100.png',    # 只有绿色 ✓ 的小模板（兜底）
+            'images/edit-button/image.png',     # 完整按钮模板
+        ],
+        search_region_ratio=(0.0, 0.0, 1, 1),  # 只在 Summary 区域搜
+    )
     
-    # hotkey_combination([Key.esc])
-    # time.sleep(1)
-    # hotkey_combination([Key.up])
-    # time.sleep(1)
-    # print("Returning to invoice list...")
-    # hotkey_combination([Key.esc])
-    # time.sleep(0.5)
-    # hotkey_combination([Key.esc])
-    # time.sleep(1)
-    
-    # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
-    # words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS, save_debug_images=True)
-    # print("check-out customers for auction", words)
-    # has_unpaid_invoice_text = "check-out customers for auction".lower() in " ".join(words).lower()
-    # if has_unpaid_invoice_text:
-    #     print("Found the check-out customers for auction text, clicking enter to confirm...")
+    screenshot = cv2.imread('images/detail4k150.png')
+    detected, info = detector.detect(screenshot, threshold=0.85, verbose=True)
+    print(f"Detection info: {info}")
+    print(f"Apply Deposit button present: {detected}")
+
+    # # 调试：画出匹配框
+    detector.visualize(screenshot, info, 'debug.png')
