@@ -24,7 +24,6 @@ def read_records_from_csv(csv_file_path):
     - refund_id
     - target_auction_id
     - bidcard_num
-    - lot
     - payment_type
     - amount
     - invoice_number
@@ -33,7 +32,6 @@ def read_records_from_csv(csv_file_path):
         "refund_id",
         "target_auction_id",
         "bidcard_num",
-        "lot",
         "payment_type",
         "amount",
         "invoice_number",
@@ -75,10 +73,10 @@ def read_records_from_csv(csv_file_path):
             record = {
                 "row_offset": row_offset,
                 "status": str(row["status"]).strip(),
-                "refund_id": str(row["refund_id"]).strip(),
+                "refund_id": str(row["refund_id"]).strip()[1:],
                 "target_auction_id": int(row["target_auction_id"]),
                 "bidcard_num": int(row["bidcard_num"]),
-                "lot": str(row["lot"]).strip(),
+                # "lot": str(row["lot"]).strip(),
                 "payment_type": str(row["payment_type"]).strip(),
                 "amount": float(row["amount"]),
                 "invoice_number": int(row["invoice_number"]),
@@ -154,7 +152,7 @@ def read_deduct_records_from_csv(csv_file_path) -> tuple[int, dict[int, list[dic
                     "row_offset": row_offset,
                     "status": str(row["status"]).strip(),
                     "invoice_number": int(row["invoice_number"]),
-                    "sc_id": str(row["sc_id"]).strip(),
+                    "sc_id": str(row["sc_id"]).strip()[1:],
                     "sc_invoice_number": str(row["sc_invoice_number"]).strip(),
                 }]
             else:
@@ -162,7 +160,7 @@ def read_deduct_records_from_csv(csv_file_path) -> tuple[int, dict[int, list[dic
                     "row_offset": row_offset,
                     "status": str(row["status"]).strip(),
                     "invoice_number": int(row["invoice_number"]),
-                    "sc_id": str(row["sc_id"]).strip(),
+                    "sc_id": str(row["sc_id"]).strip()[1:],
                     "sc_invoice_number": str(row["sc_invoice_number"]).strip(),
                 })
         except (TypeError, ValueError) as exc:

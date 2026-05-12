@@ -34,7 +34,6 @@ PAYMENT_TYPE_DICT = {
 def run_add_store_credit_flow(
     target_auction_id,
     bidcard_num,
-    lot,
     payment_type,
     amount,
     invoice_number,
@@ -75,32 +74,13 @@ def run_add_store_credit_flow(
     time.sleep(3)
     
     # if not is_in_right_invoice_page(invoice_number):
-    #     return -1, f"Failed to enter the correct invoice page: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
-    # select lot and click enter
+    #     return -1, f"Failed to enter the correct invoice page: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
     quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
     if quick_info_x == 0 or quick_info_y == 0:
-        return -1, f"Failed to locate quick info text area for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+        return -1, f"Failed to locate quick info text area for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
     
     pyautogui.click(quick_info_x, quick_info_y)
     time.sleep(0.5)
-    
-    # select_item_by_tabbing(6, confirm_with_enter=False)  # select invoice number field
-    
-    # time.sleep(1)
-    
-    # # input lot number and click enter
-    # select_item_by_name(
-    #     lot,
-    #     confirm_with_enter=True,
-    # )
-    # time.sleep(1)
-    
-    # # reverse tab to select edit item button and click enter
-    # select_item_by_tabbing(5, confirm_with_enter=True, reverse=True)
-    # time.sleep(3)
-    # # esc the edit modal
-    # hotkey_combination([Key.esc])
-    # time.sleep(2)
     
     # reverse tab to select edit invoice button and click enter
     select_item_by_tabbing(4, confirm_with_enter=True, reverse=True)
@@ -110,10 +90,10 @@ def run_add_store_credit_flow(
     log_fn(f"Editing title OCR result: {title_sentence}")
     has_editing_title = "editing customer" in title_sentence
     if not has_editing_title:
-        return -1, f"Failed to open invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+        return -1, f"Failed to open invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
     is_in_invoice_page = str(invoice_number) in title_sentence
     if not is_in_invoice_page:
-        return -1, f"Failed to enter the correct invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+        return -1, f"Failed to enter the correct invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
     # select B.History
     check_stop_requested()
     time.sleep(0.5)
@@ -146,7 +126,7 @@ def run_add_store_credit_flow(
     log_fn(f"Edit deposit title OCR result: {sentence}")
     has_deposit_title = "edit this buyer" in sentence
     if not has_deposit_title:
-        return -1, f"Failed to open add store credit page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+        return -1, f"Failed to open add store credit page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
 
     # select payment type
     payment_type_index = PAYMENT_TYPE_DICT.get(payment_type, 6)
@@ -200,7 +180,7 @@ def run_add_store_credit_flow(
     select_item_by_tabbing(7, reverse=True, confirm_with_enter=False)  # tab back to auction selection
     time.sleep(1)
 
-    return 1, f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}-{lot}, {payment_type}: {amount}"
+    return 1, f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
 
     
 def sync_credit_saved(record, df, csv_file_path, log_fn):
@@ -287,7 +267,6 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
             flow_args = {
                 "target_auction_id": record["target_auction_id"],
                 "bidcard_num": record["bidcard_num"],
-                "lot": record["lot"],
                 "payment_type": record["payment_type"],
                 "amount": record["amount"],
                 "invoice_number": record["invoice_number"],
