@@ -7,9 +7,9 @@ import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
 from pathlib import Path
-from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_NUMBER_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, MulStepError, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
+from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, MulStepError, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
 from service import complete_refund_invoice, read_deduct_records_from_csv
-from tools import extract_center_words_from_screen, is_in_right_invoice_page
+from tools import detect_template_on_screen, extract_center_words_from_screen, is_in_right_invoice_page
 
 keyboard = Controller()
 
@@ -113,24 +113,37 @@ def back_to_invoice_list(log_fn=print, max_rounds=10):
     page has time to render before the next OCR check.
     """
     for _ in range(max_rounds):
-        # Capture once per round; reuse for all three OCR regions below.
+        # Capture once per round; reuse for all template checks below.
         screenshot = pyautogui.screenshot()
-        # TODO: use template matching
+
         # 1. Already on the checkout page → done.
-        words = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS, screenshot=screenshot)
-        log_fn(f"Checkout page title OCR result: {' '.join(words)}")
-        if "check-out customers" in " ".join(words).lower():
+        checkout_detected, checkout_info = detect_template_on_screen(
+            template_paths=["images/checkout-customer/image.png"],
+            **CHECK_OUT_TITLE_COORDS,
+            return_coordinates=True,
+            screenshot=screenshot,
+        )
+        log_fn(f"Checkout page template detected: {checkout_detected}, info: {checkout_info}")
+        if checkout_detected:
             time.sleep(1)
             return
-        # TODO: use template matching
+
         # 2. "Invoice not paid in full" modal — confirm with Enter.
-        words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS, screenshot=screenshot)
-        log_fn(f"Invoice not paid in full modal OCR result: {' '.join(words)}")
-        if "not been paid in full" in " ".join(words).lower():
+        not_paid_detected, not_paid_info = detect_template_on_screen(
+            template_paths=[
+                "images/not-paid-in-full/image.png",
+                "images/not-paid-in-full/image2.png",
+            ],
+            **INVOICE_PAID_FULL_MODAL_COORDS,
+            return_coordinates=True,
+            screenshot=screenshot,
+        )
+        log_fn(f"Not paid in full modal detected: {not_paid_detected}, info: {not_paid_info}")
+        if not_paid_detected:
             hotkey_combination([Key.enter])
             time.sleep(1)
             continue
-        # TODO: use template matching
+
         # 3. "Return remaining credits" multi-credit modal — answer No.
         if is_multi_credit_modal(log_fn, screenshot=screenshot):
             hotkey_combination([Key.right])
@@ -153,23 +166,45 @@ Status codes:
 2: only a partial credit was deducted
 '''
 
-def has_apply_deposit_button(log_fn=print):
-    words = extract_center_words_from_screen(**INVOIE_SUMMARY_BLOCK_COORDS)
-    log_fn(f"OCR-detected words in invoice summary block: {' '.join(words)}")
-    summary_sentence = " ".join(words)
-    return "apply deposit" in summary_sentence.lower() or "appty deposit" in summary_sentence.lower()
+def has_apply_deposit_button(log_fn=print, screenshot=None):
+    detected, info = detect_template_on_screen(
+        template_paths=[
+            "images/apply-deposit/image.png",
+            "images/apply-deposit/image2.png",
+            "images/apply-deposit/image3.png",
+        ],
+        **INVOIE_SUMMARY_BLOCK_COORDS,
+        return_coordinates=True,
+        screenshot=screenshot,
+    )
+    log_fn(f"Apply deposit template detected: {detected}, info: {info.get('score', '')}")
+    return detected
 
-def is_credit_larger_than_due_amount(log_fn=print):
-    words = extract_center_words_from_screen(**PRINTER_POPUP_COORDS)
-    log_fn(f"OCR-detected words in printer popup: {' '.join(words)}")
-    summary_sentence = " ".join(words)
-    return "printer" in summary_sentence.lower()
+def is_credit_larger_than_due_amount(log_fn=print, screenshot=None):
+    detected, info = detect_template_on_screen(
+        template_paths=[
+            "images/printer/image.png",
+            "images/printer/image1.png",
+        ],
+        **PRINTER_POPUP_COORDS,
+        return_coordinates=True,
+        screenshot=screenshot,
+    )
+    log_fn(f"Printer popup template detected: {detected}, info: {info.get('score', '')}")
+    return detected
 
 def is_multi_credit_modal(log_fn=print, screenshot=None):
-    words = extract_center_words_from_screen(**RETURN_REMAININGS_MODAL_COORDS, screenshot=screenshot)
-    log_fn(f"OCR-detected words in return remainings modal: {' '.join(words)}")
-    summary_sentence = " ".join(words)
-    return "would you like to return the buyer" in summary_sentence.lower()
+    detected, info = detect_template_on_screen(
+        template_paths=[
+            "images/remaining-deposit/image.png",
+            "images/remaining-deposit/image3.png",
+        ],
+        **RETURN_REMAININGS_MODAL_COORDS,
+        return_coordinates=True,
+        screenshot=screenshot,
+    )
+    log_fn(f"Remaining deposit modal detected: {detected}, info: {info.get('score', '')}")
+    return detected
 
 def get_text_coordinates(text_area):
     _, coordinates = extract_center_words_from_screen(
@@ -228,10 +263,10 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
     pyautogui.click(quick_info_x, quick_info_y)
     time.sleep(1)
  
-    # check if there is "apply deposit" button, TODO: use template matching
+    # check if there is "apply deposit" button
     if not has_apply_deposit_button(log_fn=log_fn):
         return [{
-            'status': '-1', 
+            'status': '-1',
             'details': f"No credit to deduct for bidcard {bidcard_num}, invoice: {deduct_records[0]['invoice_number']}",
             'row_offset': deduct_records[i]['row_offset']
         } for i in range(len(deduct_records))]
@@ -247,7 +282,6 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
         time.sleep(2)
   
         multi_credit_modal = False
-        # TODO: use template matching
         if is_credit_larger_than_due_amount(log_fn=log_fn):
             # dismiss the model
             select_item_by_tabbing(3, confirm_with_enter=False)
@@ -258,7 +292,6 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             time.sleep(3)
             # log_fn(f"Credit amount is larger than due amount for bidcard {bidcard_num}. Please manually review and return remaining credits to buyer if needed.")
             has_partial_deduct = True
-        # TODO: use template matching
         multi_credit_modal = is_multi_credit_modal(log_fn=log_fn)
         if multi_credit_modal:	
             # click "no" to return remaining credits to buyer
@@ -274,7 +307,6 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
         if has_partial_deduct:
             break
         all_deducted_count += 1
-        # TODO: use template matching
         if not has_apply_deposit_button(log_fn=log_fn):
             # log_fn(f"All credits deducted for bidcard {bidcard_num}.")
             break
@@ -316,14 +348,19 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
     time.sleep(0.5)
     hotkey_combination([Key.up])
     time.sleep(0.5)
-    # TODO: use template matching
-    editing_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-    log_fn(f"Invoice detail page title OCR result: {' '.join(editing_title_ocr_result)}")
-    has_editing_title = "editing customer for invoice" in " ".join(editing_title_ocr_result).lower()
-    if not has_editing_title:
+    detected, info = detect_template_on_screen(
+        template_paths=[
+            "images/editing-customer/image.png",
+            "images/editing-customer/image3.png",
+        ],
+        **CHECK_OUT_TITLE_COORDS,
+        return_coordinates=True,
+    )
+    log_fn(f"Editing customer template detected: {detected}, info: {info.get('score', '')}")
+    if not detected:
         return [{
-            'status': '0', 
-            'details': f"Credit may be fully deducted but failed to open invoice detail page {bidcard_num}-{deduct_records[0]['invoice_number']}", 
+            'status': '0',
+            'details': f"Credit may be fully deducted but failed to open invoice detail page {bidcard_num}-{deduct_records[0]['invoice_number']}",
             'row_offset': deduct_records[i]['row_offset']
         } for i in range(len(deduct_records))]
     
@@ -363,11 +400,13 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
         i += 1
         hotkey_combination([Key.enter])
         time.sleep(2)
-        # TODO: use template matching
-        edit_deposit_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-        log_fn(f"Deposit detail page title OCR result: {' '.join(edit_deposit_ocr_result)}")
-        has_deposit_title = "edit this buyer deposit" in " ".join(edit_deposit_ocr_result).lower()
-        if not has_deposit_title:
+        detected, info = detect_template_on_screen(
+            template_paths=["images/edit-deposit/image.png"],
+            **CHECK_OUT_TITLE_COORDS,
+            return_coordinates=True,
+        )
+        log_fn(f"Edit deposit template detected: {detected}, info: {info.get('score', '')}")
+        if not detected:
             return [{
                 'status': '0',
                 'details': f"Fully deducted but failed to open deposit detail page {bidcard_num}-{deduct_records[0]['invoice_number']}",
@@ -392,7 +431,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             if len(cur_sc_invoice) != 2:
                 raise MulStepError(f"No invoice number found for: {cur_store_credit}")
             cur_sc_invoice_number = cur_sc_invoice[1].strip()
-            # Must use OCR or TODO use template maching to find the remain 0 amount, but what about remain 0.01, 0.02, almost like 0.0, the maching score?
+            # Must use OCR
             words = extract_center_words_from_screen(**CREDIT_DETAILS_COORDS, kernel_size=(3,3))
             scetence = " ".join(words).lower()
             log_fn(f"OCR-detected words in credit details: {scetence}")

@@ -22,6 +22,20 @@ INVOICE_PAID_FULL_MODAL_COORDS = {
     "y2": 0.6076,
 }
 
+EDIT_BUTTON_COORDS = {
+    "x1": 0.3,
+    "x2": 0.6,
+    "y1": 0.2,
+    "y2": 0.6,
+}
+
+SELECT_NEW_BUTTON_COORDS = {
+    "x1": 0.5,
+    "x2": 0.7,
+    "y1": 0.3,
+    "y2": 0.55
+}
+
 INVOIE_SUMMARY_BLOCK_COORDS = {
     "x1": 0.6313,
     "x2": 0.7676,
@@ -71,10 +85,10 @@ EASY_NAVIGATOR_TITLE_COORDS = {
     "y2": 0.6,
 }
 
-INVOICE_NUMBER_COORDS = {
-    "x1": 0.55,
-    "x2": 0.75,
-    "y1": 0.3,
+BIDCARD_NUMBER_COORDS = {
+    "x1": 0.2,
+    "x2": 0.5,
+    "y1": 0.2,
     "y2": 0.5
 }
 

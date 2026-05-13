@@ -3,9 +3,9 @@ import pyautogui
 import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
-from auto_common import CHECK_OUT_TITLE_COORDS, EASY_NAVIGATOR_TITLE_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
+from auto_common import CHECK_OUT_TITLE_COORDS, EASY_NAVIGATOR_TITLE_COORDS, EDIT_BUTTON_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, QUICK_INFO_COORDS, SELECT_NEW_BUTTON_COORDS, get_target_window, activate_window, hotkey_combination, select_item_by_name, select_item_by_tabbing, StopRequested
 from auto_deduct_credit import get_text_coordinates
-from tools import extract_center_words_from_screen, is_in_right_invoice_page
+from tools import detect_template_on_screen, extract_center_words_from_screen, is_in_right_invoice_page
 from service import query_refund_invoice_enhanced, add_store_credit_refund_invoice, read_records_from_csv
 from auto_common import AUCTION_FLEX_CLOUD_TITLE, AUCTION_FLEX_WINDOW_TITLE, IS_ONLINE, check_stop_requested, set_stop_checker
 
@@ -44,7 +44,25 @@ def run_add_store_credit_flow(
     window = get_target_window(AUCTION_FLEX_WINDOW_TITLE)
     activate_window(window)
     check_stop_requested()
-    pyautogui.press("enter")
+    time.sleep(1)
+    detected, info = detect_template_on_screen(
+        template_paths=["images/easy-navigator/image.png"],
+        **EASY_NAVIGATOR_TITLE_COORDS,
+        return_coordinates=True,
+    )
+    log_fn(f"Easy Navigator title detected: {detected}, info: {info.get('score', '')}")
+    if not detected:
+        return -1, f"Failed to locate easy navigator {invoice_number}"
+
+    select_detected, select_info = detect_template_on_screen(
+        template_paths=["images/select-new/image.png", "images/select-new/image1.png"],
+        **SELECT_NEW_BUTTON_COORDS,
+        return_coordinates=True,
+    )
+    log_fn(f"Select button detected: {select_detected}, info: {select_info.get('score', '')}")
+    if not select_detected:
+        return -1, f"Failed to locate select button for invoice {invoice_number}"
+    pyautogui.click(select_info["x"], select_info["y"])
     time.sleep(1.5)  # Wait for the app to load
 
     # select auction id in modal
@@ -72,28 +90,21 @@ def run_add_store_credit_flow(
         confirm_with_enter=True,
     )
     time.sleep(3)
-    
-    # if not is_in_right_invoice_page(invoice_number):
-    #     return -1, f"Failed to enter the correct invoice page: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
-    quick_info_x, quick_info_y = get_text_coordinates(text_area=QUICK_INFO_COORDS)
-    if quick_info_x == 0 or quick_info_y == 0:
-        return -1, f"Failed to locate quick info text area for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
-    
-    pyautogui.click(quick_info_x, quick_info_y)
-    time.sleep(0.5)
-    
-    # reverse tab to select edit invoice button and click enter
-    select_item_by_tabbing(4, confirm_with_enter=True, reverse=True)
+    if not is_in_right_invoice_page(bidcard_num, log_fn=log_fn):
+        return -1, f"Not in the right invoice page for invoice {invoice_number}"
+        
+    detected, info = detect_template_on_screen(
+        template_paths=["images/edit-button/image.png"],
+        **EDIT_BUTTON_COORDS,
+        return_coordinates=True,
+    )
+    log_fn(f"Edit button detected: {detected}, info: {info.get('score', '')}")
+    if not detected:
+        return -1, f"Failed to locate edit invoice button for invoice {invoice_number}"
+
+    pyautogui.click(info["x"], info["y"])
     time.sleep(3)
-    editing_title_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-    title_sentence = " ".join(editing_title_ocr_result).lower()
-    log_fn(f"Editing title OCR result: {title_sentence}")
-    has_editing_title = "editing customer" in title_sentence
-    if not has_editing_title:
-        return -1, f"Failed to open invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
-    is_in_invoice_page = str(invoice_number) in title_sentence
-    if not is_in_invoice_page:
-        return -1, f"Failed to enter the correct invoice editing page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
+    
     # select B.History
     check_stop_requested()
     time.sleep(0.5)
@@ -121,12 +132,14 @@ def run_add_store_credit_flow(
     hotkey_combination([Key.enter])
     time.sleep(2)
 
-    edit_deposit_ocr_result = extract_center_words_from_screen(**CHECK_OUT_TITLE_COORDS)
-    sentence = " ".join(edit_deposit_ocr_result).lower()
-    log_fn(f"Edit deposit title OCR result: {sentence}")
-    has_deposit_title = "edit this buyer" in sentence
-    if not has_deposit_title:
-        return -1, f"Failed to open add store credit page for invoice {invoice_number}: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
+    detected, info = detect_template_on_screen(
+        template_paths=["images/edit-deposit/image.png"],
+        **CHECK_OUT_TITLE_COORDS,
+        return_coordinates=True,
+    )
+    log_fn(f"Edit deposit template detected: {detected}, info: {info.get('score', '')}")
+    if not detected:
+        return -1, f"Failed to open add store credit page for invoice {invoice_number}"
 
     # select payment type
     payment_type_index = PAYMENT_TYPE_DICT.get(payment_type, 6)
@@ -165,20 +178,19 @@ def run_add_store_credit_flow(
     time.sleep(1)
     
     # if the invoice is unfully paid invoice, there will be a confirmation popup, click enter to confirm. Other wise, open the invoice detail again
-    words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
-    unpaid_sentence = " ".join(words).lower()
-    log_fn(f"Invoice paid full modal OCR result: {unpaid_sentence}")
-    has_unpaid_invoice_text = "This invoice has not".lower() in unpaid_sentence
-    if has_unpaid_invoice_text:
+    detected, info = detect_template_on_screen(
+        template_paths=["images/not-paid-in-full/image.png", "images/not-paid-in-full/image2.png"],
+        **INVOICE_PAID_FULL_MODAL_COORDS,
+        return_coordinates=True,
+    )
+    log_fn(f"Not paid in full modal detected: {detected}, info: {info.get('score', '')}")
+    if detected:
         hotkey_combination([Key.enter])
         time.sleep(3)
         
     # exit to easy natigator page to select another auction
     hotkey_combination([Key.esc])
     time.sleep(3)
-    
-    select_item_by_tabbing(7, reverse=True, confirm_with_enter=False)  # tab back to auction selection
-    time.sleep(1)
 
     return 1, f"Success: {invoice_number}-{bidcard_num}-{target_auction_id}, {payment_type}: {amount}"
 
@@ -205,24 +217,35 @@ def _escape_to_easy_navigator(log_fn=print, max_esc=6):
     """
     for _ in range(max_esc):
         check_stop_requested()
-        words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS)
-        sentence = " ".join(words).lower()
-        log_fn(f"Easy navigator title OCR result during recovery: {sentence}")
-        if "easy navigator" in sentence:
+        easy_nav_detected, easy_nav_info = detect_template_on_screen(
+            template_paths=["images/easy-navigator/image.png"],
+            **EASY_NAVIGATOR_TITLE_COORDS,
+            return_coordinates=True,
+        )
+        log_fn(f"Easy navigator template detected during recovery: {easy_nav_detected}, info: {easy_nav_info}")
+        if easy_nav_detected:
             return True
 
         # Some modals cannot be dismissed by ESC — detect and confirm with Enter.
-        modal_words = extract_center_words_from_screen(**INVOICE_PAID_FULL_MODAL_COORDS)
-        modal_sentence = " ".join(modal_words).lower()
-        log_fn(f"Invoice paid full modal OCR result: {modal_sentence}")
-        if "not been paid in full" in modal_sentence:
+        not_paid_detected, not_paid_info = detect_template_on_screen(
+            template_paths=["images/not-paid-in-full/image.png", "images/not-paid-in-full/image2.png"],
+            **INVOICE_PAID_FULL_MODAL_COORDS,
+            return_coordinates=True,
+        )
+        log_fn(f"Not paid in full modal detected: {not_paid_detected}, info: {not_paid_info}")
+        if not_paid_detected:
             log_fn("Recovery: closing modal with Enter.")
             hotkey_combination([Key.enter])
             time.sleep(1.5)
             continue
 
-        
-        if "to be empty" in modal_sentence:
+        empty_detected, empty_info = detect_template_on_screen(
+            template_paths=["images/appear-to-be-empty/image.png", "images/appear-to-be-empty/image1.png"],
+            **INVOICE_PAID_FULL_MODAL_COORDS,
+            return_coordinates=True,
+        )
+        log_fn(f"Appear to be empty modal detected: {empty_detected}, info: {empty_info}")
+        if empty_detected:
             log_fn("Recovery: closing empty deposit modal with Enter.")
             hotkey_combination([Key.left])
             time.sleep(0.2)
@@ -233,8 +256,12 @@ def _escape_to_easy_navigator(log_fn=print, max_esc=6):
         hotkey_combination([Key.esc])
         time.sleep(1)
 
-    words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS)
-    return "easy navigator" in " ".join(words).lower()
+    easy_nav_detected, _ = detect_template_on_screen(
+        template_paths=["images/easy-navigator/image.png"],
+        **EASY_NAVIGATOR_TITLE_COORDS,
+        return_coordinates=True,
+    )
+    return easy_nav_detected
 
 
 def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
@@ -311,15 +338,6 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
                     df.to_csv(csv_file_path, index=False)
                     raise Exception(msg)
 
-                # if IS_ONLINE:
-                #     mutation_result = add_store_credit_refund_invoice(record["refund_id"])
-                #     modified_count = int(mutation_result.get("modified_count", 0) or 0)
-
-                #     if modified_count == 0:
-                #         df.at[record["row_offset"], "status"] = '-1'
-                #         df.at[record["row_offset"], "details"] = 'Store credit added, but mutation modified_count=0' + df.at[record["row_offset"], "details"]
-                #         log_fn(f"{record['invoice_number']}: Store credit added, but update to database failed")
-
                 check_resume_status(log_fn)
 
             except StopRequested:
@@ -333,8 +351,6 @@ def pre_processing(csv_file_path, log_fn=print, should_stop_fn=None):
 
                 recovered = _escape_to_easy_navigator(log_fn)
                 if recovered:
-                    select_item_by_tabbing(7, reverse=True, confirm_with_enter=False)
-                    time.sleep(1)
                     log_fn(f"{record['invoice_number']}: Recovered — resuming with next record.")
                 else:
                     raise Exception(f"{record['invoice_number']}: Recovery failed — app may need manual attention.")
@@ -354,11 +370,13 @@ status
 '''
 
 def check_resume_status(log_fn):
-    words = extract_center_words_from_screen(**EASY_NAVIGATOR_TITLE_COORDS)
-    sentence = " ".join(words).lower()
-    log_fn(f"Easy navigator OCR result: {sentence}")
-    has_easy_navigator_text = "easy navigator".lower() in sentence
-    if not has_easy_navigator_text:
+    detected, info = detect_template_on_screen(
+        template_paths=["images/easy-navigator/image.png"],
+        **EASY_NAVIGATOR_TITLE_COORDS,
+        return_coordinates=True,
+    )
+    log_fn(f"Easy navigator template detected: {detected}, info: {info.get('score', '')}")
+    if not detected:
         raise Exception("Not in easy navigator page, current page might be frozen, please check the application.")
     
 
