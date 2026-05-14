@@ -330,6 +330,20 @@ def _resolve_tesseract_executable_path():
     return None
 
 
+def _resolve_resource_path(path_str):
+    """
+    Resolve a filesystem path for resource files so bundled PyInstaller
+    executables can access data extracted under `sys._MEIPASS`.
+    """
+    p = Path(path_str)
+    # When bundled with PyInstaller, data files are extracted under _MEIPASS
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", os.getcwd()))
+        return str((base / p).resolve())
+    # Otherwise return a normalized absolute or relative path as-is
+    return str(p)
+
+
 def is_in_right_invoice_page(bidcard_num, log_fn=print):
     bidcard_num = str(bidcard_num).strip()
     words = extract_center_words_from_screen(**BIDCARD_NUMBER_COORDS, kernel_size=(3,3))
@@ -347,9 +361,10 @@ _TEMPLATE_FINE_WINDOW = 0.12
 
 @lru_cache(maxsize=32)
 def _load_template_gray(template_path):
-    img = cv2.imread(str(template_path), cv2.IMREAD_COLOR)
+    resolved = _resolve_resource_path(template_path)
+    img = cv2.imread(resolved, cv2.IMREAD_COLOR)
     if img is None:
-        raise FileNotFoundError(f"Cannot load template: {template_path}")
+        raise FileNotFoundError(f"Cannot load template: {template_path}. Resolved path: {resolved}")
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 
