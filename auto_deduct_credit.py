@@ -7,7 +7,7 @@ import time
 import pandas as pd
 from pynput.keyboard import Key, Controller
 from pathlib import Path
-from auto_common import AUCTION_FLEX_CLOUD_TITLE, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, MulStepError, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
+from auto_common import AUCTION_FLEX_CLOUD_TITLE, EDIT_BUTTON_COORDS, EDIT_CUSTOMER_BUTTON_COORDS, INVOICE_PAID_FULL_MODAL_COORDS, IS_ONLINE, PRINTER_POPUP_COORDS, QUICK_INFO_COORDS, RETURN_REMAININGS_MODAL_COORDS, CREDIT_DETAILS_COORDS, MulStepError, activate_window, check_stop_requested, copy, get_target_window, paste, select_item_by_name, select_item_by_tabbing, INVOIE_SUMMARY_BLOCK_COORDS, CHECK_OUT_TITLE_COORDS, set_stop_checker, hotkey_combination
 from service import complete_refund_invoice, read_deduct_records_from_csv
 from tools import detect_template_on_screen, extract_center_words_from_screen, is_in_right_invoice_page
 
@@ -353,7 +353,7 @@ def auto_processing(bidcard_num: int, deduct_records: list[dict], log_fn=print) 
             "images/editing-customer/image.png",
             "images/editing-customer/image3.png",
         ],
-        **CHECK_OUT_TITLE_COORDS,
+        **EDIT_CUSTOMER_BUTTON_COORDS,
         return_coordinates=True,
     )
     log_fn(f"Editing customer template detected: {detected}, info: {info.get('score', '')}")

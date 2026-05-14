@@ -560,7 +560,6 @@ if __name__ == "__main__":
     detected, info = detect_template_on_screen(
         template_paths=["images/select-new/image.png"],
         **EASY_NAVIGATOR_TITLE_COORDS,
-        save_debug_images=True,
         return_coordinates=True
     )
     print(f"Detected: {detected}")

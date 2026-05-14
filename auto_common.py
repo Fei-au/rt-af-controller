@@ -29,6 +29,13 @@ EDIT_BUTTON_COORDS = {
     "y2": 0.6,
 }
 
+EDIT_CUSTOMER_BUTTON_COORDS = {
+    "x1": 0.2,
+    "x2": 0.5,
+    "y1": 0.2,
+    "y2": 0.55,
+}
+
 SELECT_NEW_BUTTON_COORDS = {
     "x1": 0.5,
     "x2": 0.7,
