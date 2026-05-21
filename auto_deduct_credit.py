@@ -79,7 +79,7 @@ def processing(csv_file_path, log_fn=print, should_stop_fn=None):
                 df.at[result["row_offset"], "details"] = result.get("details")
                 df.at[result["row_offset"], "errors"] = result.get("errors")
                 if result["status"] == '1' and IS_ONLINE:
-                    sc_id = str(df.at[result["row_offset"], "sc_id"]).strip()
+                    sc_id = str(df.at[result["row_offset"], "sc_id"]).strip()[1:]
                     if sc_id:
                         try:
                             complete_refund_invoice(sc_id)
