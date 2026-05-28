@@ -6,7 +6,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 import auto_add_credit
 import auto_deduct_credit
-from auto_common import IS_ONLINE
+from auto_common import IS_ONLINE, APP_VERSION
 from service import upload_file_to_s3
 
 
@@ -282,10 +282,10 @@ class StoreCreditApp:
         try:
             log_file_path.write_text(log_text, encoding="utf-8")
         except OSError as exc:
-            self._append_log_immediately(f"[{prefix.upper()}] Failed to write log file: {exc}")
+            self._append_log_immediately(f"[v{APP_VERSION}] [{prefix.upper()}] Failed to write log file: {exc}")
             return
 
-        self._append_log_immediately(f"[{prefix.upper()}] Logs saved to {log_file_path}")
+        self._append_log_immediately(f"[v{APP_VERSION}] [{prefix.upper()}] Logs saved to {log_file_path}")
 
         if not IS_ONLINE:
             return
@@ -334,11 +334,11 @@ class StoreCreditApp:
 
     def _queue_add_log(self, message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.log_queue.put(f"[{timestamp}] [ADD] {message}")
+        self.log_queue.put(f"[{timestamp}] [v{APP_VERSION}] [ADD] {message}")
 
     def _queue_deduct_log(self, message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.log_queue.put(f"[{timestamp}] [DEDUCT] {message}")
+        self.log_queue.put(f"[{timestamp}] [v{APP_VERSION}] [DEDUCT] {message}")
 
     def _drain_log_queue(self):
         while not self.log_queue.empty():

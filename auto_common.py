@@ -10,6 +10,8 @@ import pyperclip
 keyboard = Controller()
 
 
+APP_VERSION = "2.3"
+
 AUCTION_FLEX_WINDOW_TITLE = "auction flex v"
 AUCTION_FLEX_CLOUD_TITLE = "auction flex in the cloud"
 IS_ONLINE = True if os.getenv("IS_ONLINE", "FALSE").upper() == "TRUE" else False
@@ -333,8 +335,8 @@ def double_click_image_in_window(
     return True
 
 def copy():
-    pyautogui.hotkey('ctrl', 'a')
-    pyautogui.hotkey('ctrl', 'c')
+    hotkey_combination([Key.ctrl, 'a'])
+    hotkey_combination([Key.ctrl, 'c'])
     
 def paste():
     time.sleep(0.5)
