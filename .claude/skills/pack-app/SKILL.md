@@ -50,11 +50,12 @@ If it returns `False`, stop and tell the user — do not invent a `.env`.
 Use the exact command from `CLAUDE.md`:
 
 ```powershell
-pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller" --add-data=".env;." --hidden-import="pytesseract" main.py
+pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller" --add-data=".env;." --add-data="sounds;sounds" --hidden-import="pytesseract" main.py
 ```
 
 Notes:
 - `--add-data=".env;."` uses a semicolon on Windows (colon on Linux/macOS — but this app is Windows-only).
+- `--add-data="sounds;sounds"` bundles the alarm sound folder (`sounds/alarm.wav`, looped when a run finishes). The `sounds/` directory must exist at build time — it does, since it contains a `README.md` — or PyInstaller will error.
 - Run with `run_in_background: true` if you expect a long build; otherwise allow up to ~5 minutes.
 - PyInstaller writes intermediate artifacts to `build/` and the final binary to `dist/SC Controller.exe`. The spec file `SC Controller.spec` is regenerated each run.
 

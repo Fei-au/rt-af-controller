@@ -1,6 +1,7 @@
 import queue
 import threading
 import tkinter as tk
+import winsound
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -8,6 +9,7 @@ import auto_add_credit
 import auto_deduct_credit
 from auto_common import IS_ONLINE, APP_VERSION
 from service import upload_file_to_s3
+from tools import _resolve_resource_path
 
 
 class StoreCreditApp:
@@ -99,7 +101,16 @@ class StoreCreditApp:
 
         ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=(16, 14))
 
-        ttk.Label(frame, text="Logs:").pack(anchor=tk.W, pady=(12, 0))
+        log_header_row = ttk.Frame(frame)
+        log_header_row.pack(fill=tk.X, pady=(12, 0))
+        ttk.Label(log_header_row, text="Logs:").pack(side=tk.LEFT)
+        self.stop_alarm_btn = ttk.Button(
+            log_header_row,
+            text="Stop Alarm",
+            command=self._stop_alarm,
+            state=tk.DISABLED,
+        )
+        self.stop_alarm_btn.pack(side=tk.RIGHT)
 
         log_frame = ttk.Frame(frame)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
@@ -146,6 +157,7 @@ class StoreCreditApp:
             self._queue_add_log("Process is already running.")
             return
 
+        self._stop_alarm()
         self.add_stop_event.clear()
         auto_add_credit.CSV_FILE_PATH = csv_path
 
@@ -190,6 +202,7 @@ class StoreCreditApp:
             self._queue_deduct_log("Deduct process is already running.")
             return
         
+        self._stop_alarm()
         self.deduct_stop_event.clear()
         auto_deduct_credit.CSV_FILE_PATH = csv_path
 
@@ -238,6 +251,7 @@ class StoreCreditApp:
             self.root.after(0, self._on_deduct_worker_done)
 
     def _on_worker_done(self):
+        was_stopped = self.add_stop_event.is_set()
         self.add_start_btn.configure(state=tk.NORMAL)
         self.add_stop_btn.configure(state=tk.DISABLED)
         if not (self.deduct_worker_thread and self.deduct_worker_thread.is_alive()):
@@ -245,8 +259,11 @@ class StoreCreditApp:
         self.add_stop_event.clear()
         self._queue_add_log("Process finished.")
         self._save_and_upload_logs(self.add_csv_path_var.get(), prefix="add")
+        if not was_stopped:
+            self._start_alarm()
 
     def _on_deduct_worker_done(self):
+        was_stopped = self.deduct_stop_event.is_set()
         self.deduct_start_btn.configure(state=tk.NORMAL)
         self.deduct_stop_btn.configure(state=tk.DISABLED)
         if not (self.add_worker_thread and self.add_worker_thread.is_alive()):
@@ -254,6 +271,27 @@ class StoreCreditApp:
         self.deduct_stop_event.clear()
         self._queue_deduct_log("Deduct process finished.")
         self._save_and_upload_logs(self.deduct_csv_path_var.get(), prefix="deduct")
+        if not was_stopped:
+            self._start_alarm()
+
+    def _start_alarm(self):
+        alarm_path = _resolve_resource_path("sounds/alarm.wav")
+        try:
+            winsound.PlaySound(
+                str(alarm_path),
+                winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP,
+            )
+        except Exception:
+            pass
+        self.stop_alarm_btn.configure(state=tk.NORMAL)
+
+    def _stop_alarm(self):
+        """Stop the looping alarm sound and disable the 'Stop Alarm' button."""
+        try:
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        except Exception:
+            pass
+        self.stop_alarm_btn.configure(state=tk.DISABLED)
 
     def _save_and_upload_logs(self, csv_path, prefix):
         """

@@ -33,7 +33,7 @@ python main.py
 python -m pyautogui
 
 # Package as single-file Windows executable
-pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller" --add-data=".env;." --hidden-import="pytesseract" main.py
+pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller" --add-data=".env;." --add-data="sounds;sounds" --hidden-import="pytesseract" main.py
 ```
 
 There are no automated tests; validation is done by running the app and inspecting live logs and output CSVs.
