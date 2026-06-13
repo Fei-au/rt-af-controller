@@ -14,7 +14,7 @@ python -m pyautogui
 
 ## Pack the app
 ```cmd
-pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller 2.3" --add-data ".env;." --add-data "images;images" --add-data "sounds;sounds" --hidden-import="pytesseract" main.py
+pyinstaller --onefile --windowed --icon "images/app.ico" --noconsole --name="SC Controller 2.4" --add-data ".env;." --add-data "images;images" --add-data "sounds;sounds" --hidden-import="pytesseract" main.py
 ```
 
 

@@ -10,7 +10,7 @@ import pyperclip
 keyboard = Controller()
 
 
-APP_VERSION = "2.3"
+APP_VERSION = "2.4"
 
 AUCTION_FLEX_WINDOW_TITLE = "auction flex v"
 AUCTION_FLEX_CLOUD_TITLE = "auction flex in the cloud"
@@ -32,9 +32,9 @@ EDIT_BUTTON_COORDS = {
 }
 
 EDIT_CUSTOMER_BUTTON_COORDS = {
-    "x1": 0.2,
-    "x2": 0.5,
-    "y1": 0.2,
+    "x1": 0.05,
+    "x2": 0.55,
+    "y1": 0.1,
     "y2": 0.55,
 }
 
